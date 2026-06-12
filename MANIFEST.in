@@ -1,0 +1,5 @@
+include README.md
+include LICENSE
+include crypt_lib.h
+recursive-include uaes-stubs *.pyi
+recursive-include tests *.py
