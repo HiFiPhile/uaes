@@ -44,6 +44,22 @@ class AES_ECB:
         """
         ...
 
+    def encrypt_into(self, data: bytearray) -> None:
+        """
+        Encrypt writable buffer in-place using AES ECB mode.
+        
+        :param data: Writable buffer to encrypt. Must be a multiple of 16 bytes.
+        """
+        ...
+
+    def decrypt_into(self, data: bytearray) -> None:
+        """
+        Decrypt writable buffer in-place using AES ECB mode.
+        
+        :param data: Writable buffer to decrypt. Must be a multiple of 16 bytes.
+        """
+        ...
+
 
 class AES_CBC:
     """
@@ -85,6 +101,22 @@ class AES_CBC:
         """
         ...
 
+    def encrypt_into(self, data: bytearray) -> None:
+        """
+        Encrypt writable buffer in-place using AES CBC mode.
+        
+        :param data: Writable buffer to encrypt. Must be a multiple of 16 bytes.
+        """
+        ...
+
+    def decrypt_into(self, data: bytearray) -> None:
+        """
+        Decrypt writable buffer in-place using AES CBC mode.
+        
+        :param data: Writable buffer to decrypt. Must be a multiple of 16 bytes.
+        """
+        ...
+
 
 class AES_CTR:
     """
@@ -116,6 +148,14 @@ class AES_CTR:
 
         :param iv: Initialization vector/nonce (16 bytes).
         :param ctr: A 32-bit integer representing the counter value.
+        """
+        ...
+
+    def crypt_into(self, data: bytearray) -> None:
+        """
+        Encrypt/decrypt writable buffer in-place using AES CTR mode.
+
+        :param data: Writable buffer to process.
         """
         ...
 
@@ -162,6 +202,28 @@ class AES_GCM:
         Update the initialization vector without re-initializing the key.
 
         :param iv: Initialization vector/nonce (12 bytes).
+        """
+        ...
+
+    def encrypt_into(self, data: bytearray, aad: bytes = b"", tag_len: int = 16) -> bytes:
+        """
+        Encrypt buffer in-place using AES GCM mode and return the tag.
+
+        :param data: Writable buffer to encrypt in-place.
+        :param aad: Additional Authenticated Data (AAD).
+        :param tag_len: The length of the authentication tag.
+        :return: The authentication tag.
+        """
+        ...
+
+    def decrypt_into(self, data: bytearray, tag: bytes, aad: bytes = b"") -> None:
+        """
+        Decrypt buffer in-place using AES GCM mode and verify the tag.
+
+        :param data: Writable buffer to decrypt in-place.
+        :param tag: The authentication tag to verify.
+        :param aad: Additional Authenticated Data (AAD).
+        :raises ValueError: If the authentication tag verification fails.
         """
         ...
 

@@ -239,5 +239,99 @@ def run_tests():
     if passed != len(vectors):
         exit(1)
 
+def run_into_tests():
+    """Test all _into (in-place) methods against the same vectors."""
+    vectors = NIST_VECTORS + generate_random_vectors()
+    passed = 0
+    total = 0
+
+    for v in vectors:
+        name = v['name'] + "_into"
+        try:
+            if v['mode'] == 'ECB':
+                total += 1
+                # encrypt_into
+                buf = bytearray(v['pt'])
+                ctx = uaes.AES_ECB(key=v['key'])
+                ctx.encrypt_into(buf)
+                assert buf == v['ct'], f"CT mismatch. Expected {v['ct'].hex()}, got {buf.hex()}"
+
+                # decrypt_into
+                ctx.decrypt_into(buf)
+                assert buf == v['pt'], "PT mismatch"
+
+                # Verify bytes input is rejected
+                try:
+                    ctx.encrypt_into(v['pt'])
+                    assert False, "Should reject bytes input"
+                except TypeError:
+                    pass
+
+            elif v['mode'] == 'CBC':
+                total += 1
+                # encrypt_into
+                buf = bytearray(v['pt'])
+                ctx = uaes.AES_CBC(key=v['key'], iv=v['iv'])
+                ctx.encrypt_into(buf)
+                assert buf == v['ct'], f"CT mismatch. Expected {v['ct'].hex()}, got {buf.hex()}"
+
+                # decrypt_into
+                ctx2 = uaes.AES_CBC(key=v['key'], iv=v['iv'])
+                ctx2.decrypt_into(buf)
+                assert buf == v['pt'], "PT mismatch"
+
+            elif v['mode'] == 'CTR':
+                total += 1
+                # crypt_into (encrypt)
+                buf = bytearray(v['pt'])
+                ctx = uaes.AES_CTR(key=v['key'], iv=v['iv'])
+                ctx.crypt_into(buf)
+                assert buf == v['ct'], f"CT mismatch. Expected {v['ct'].hex()}, got {buf.hex()}"
+
+                # crypt_into (decrypt)
+                ctx2 = uaes.AES_CTR(key=v['key'], iv=v['iv'])
+                ctx2.crypt_into(buf)
+                assert buf == v['pt'], "PT mismatch"
+
+            elif v['mode'] == 'GCM':
+                total += 1
+                # encrypt_into: returns tag, encrypts buffer in-place
+                buf = bytearray(v['pt'])
+                ctx = uaes.AES_GCM(key=v['key'], iv=v['iv'])
+                tag = ctx.encrypt_into(buf, aad=v['aad'] if v['aad'] else None, tag_len=len(v['tag']))
+                assert buf == v['ct'], f"CT mismatch. Expected {v['ct'].hex()}, got {bytes(buf).hex()}"
+                assert tag == v['tag'], f"Tag mismatch. Expected {v['tag'].hex()}, got {tag.hex()}"
+
+                # decrypt_into: decrypts in-place, returns None
+                ctx2 = uaes.AES_GCM(key=v['key'], iv=v['iv'])
+                result = ctx2.decrypt_into(buf, tag=v['tag'], aad=v['aad'] if v['aad'] else None)
+                assert result is None, "decrypt_into should return None"
+                assert buf == v['pt'], "PT mismatch"
+
+                # Verify bad tag raises ValueError
+                ctx3 = uaes.AES_GCM(key=v['key'], iv=v['iv'])
+                bad_tag = bytes(len(v['tag']))
+                buf_bad = bytearray(v['ct'])
+                try:
+                    ctx3.decrypt_into(buf_bad, tag=bad_tag, aad=v['aad'] if v['aad'] else None)
+                    assert False, "Should raise ValueError for bad tag"
+                except ValueError:
+                    pass
+
+            elif v['mode'] == 'CMAC':
+                # No _into method for CMAC
+                continue
+
+            print(f"[PASS] {name}")
+            passed += 1
+        except Exception as e:
+            print(f"[FAIL] {name}: {e}")
+
+    print(f"Passed {passed} / {total} _into tests.")
+    if passed != total:
+        exit(1)
+
 if __name__ == '__main__':
     run_tests()
+    print()
+    run_into_tests()

@@ -57,9 +57,37 @@ static PyObject* AES_ECB_decrypt(AES_ECBObject *self, PyObject *args) {
     return out;
 }
 
+static PyObject* AES_ECB_encrypt_into(AES_ECBObject *self, PyObject *args) {
+    Py_buffer buf;
+    if (!PyArg_ParseTuple(args, "w*", &buf)) return NULL;
+    if (buf.len % 16 != 0) {
+        PyBuffer_Release(&buf);
+        PyErr_SetString(PyExc_ValueError, "Data length must be a multiple of 16 bytes");
+        return NULL;
+    }
+    AES_ECB_Encrypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len);
+    PyBuffer_Release(&buf);
+    Py_RETURN_NONE;
+}
+
+static PyObject* AES_ECB_decrypt_into(AES_ECBObject *self, PyObject *args) {
+    Py_buffer buf;
+    if (!PyArg_ParseTuple(args, "w*", &buf)) return NULL;
+    if (buf.len % 16 != 0) {
+        PyBuffer_Release(&buf);
+        PyErr_SetString(PyExc_ValueError, "Data length must be a multiple of 16 bytes");
+        return NULL;
+    }
+    AES_ECB_Decrypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len);
+    PyBuffer_Release(&buf);
+    Py_RETURN_NONE;
+}
+
 static PyMethodDef AES_ECB_methods[] = {
-    {"encrypt", (PyCFunction)AES_ECB_encrypt, METH_VARARGS, "Encrypt data in ECB mode"},
-    {"decrypt", (PyCFunction)AES_ECB_decrypt, METH_VARARGS, "Decrypt data in ECB mode"},
+    {"encrypt", (PyCFunction)AES_ECB_encrypt, METH_VARARGS, "Encrypt data in ECB mode (returns new bytes)"},
+    {"decrypt", (PyCFunction)AES_ECB_decrypt, METH_VARARGS, "Decrypt data in ECB mode (returns new bytes)"},
+    {"encrypt_into", (PyCFunction)AES_ECB_encrypt_into, METH_VARARGS, "Encrypt writable buffer in-place"},
+    {"decrypt_into", (PyCFunction)AES_ECB_decrypt_into, METH_VARARGS, "Decrypt writable buffer in-place"},
     {NULL}
 };
 
@@ -136,9 +164,37 @@ static PyObject* AES_CBC_decrypt(AES_CBCObject *self, PyObject *args) {
     return out;
 }
 
+static PyObject* AES_CBC_encrypt_into(AES_CBCObject *self, PyObject *args) {
+    Py_buffer buf;
+    if (!PyArg_ParseTuple(args, "w*", &buf)) return NULL;
+    if (buf.len % 16 != 0) {
+        PyBuffer_Release(&buf);
+        PyErr_SetString(PyExc_ValueError, "Data length must be a multiple of 16 bytes");
+        return NULL;
+    }
+    AES_CBC_Encrypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len);
+    PyBuffer_Release(&buf);
+    Py_RETURN_NONE;
+}
+
+static PyObject* AES_CBC_decrypt_into(AES_CBCObject *self, PyObject *args) {
+    Py_buffer buf;
+    if (!PyArg_ParseTuple(args, "w*", &buf)) return NULL;
+    if (buf.len % 16 != 0) {
+        PyBuffer_Release(&buf);
+        PyErr_SetString(PyExc_ValueError, "Data length must be a multiple of 16 bytes");
+        return NULL;
+    }
+    AES_CBC_Decrypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len);
+    PyBuffer_Release(&buf);
+    Py_RETURN_NONE;
+}
+
 static PyMethodDef AES_CBC_methods[] = {
-    {"encrypt", (PyCFunction)AES_CBC_encrypt, METH_VARARGS, "Encrypt data in CBC mode"},
-    {"decrypt", (PyCFunction)AES_CBC_decrypt, METH_VARARGS, "Decrypt data in CBC mode"},
+    {"encrypt", (PyCFunction)AES_CBC_encrypt, METH_VARARGS, "Encrypt data in CBC mode (returns new bytes)"},
+    {"decrypt", (PyCFunction)AES_CBC_decrypt, METH_VARARGS, "Decrypt data in CBC mode (returns new bytes)"},
+    {"encrypt_into", (PyCFunction)AES_CBC_encrypt_into, METH_VARARGS, "Encrypt writable buffer in-place"},
+    {"decrypt_into", (PyCFunction)AES_CBC_decrypt_into, METH_VARARGS, "Decrypt writable buffer in-place"},
     {"set_iv", (PyCFunction)AES_CBC_set_iv, METH_VARARGS, "Set IV"},
     {NULL}
 };
@@ -219,8 +275,17 @@ static PyObject* AES_CTR_crypt(AES_CTRObject *self, PyObject *args) {
     return out;
 }
 
+static PyObject* AES_CTR_crypt_into(AES_CTRObject *self, PyObject *args) {
+    Py_buffer buf;
+    if (!PyArg_ParseTuple(args, "w*", &buf)) return NULL;
+    AES_CTR_Crypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len);
+    PyBuffer_Release(&buf);
+    Py_RETURN_NONE;
+}
+
 static PyMethodDef AES_CTR_methods[] = {
-    {"crypt", (PyCFunction)AES_CTR_crypt, METH_VARARGS, "Encrypt/Decrypt data in CTR mode"},
+    {"crypt", (PyCFunction)AES_CTR_crypt, METH_VARARGS, "Encrypt/Decrypt data in CTR mode (returns new bytes)"},
+    {"crypt_into", (PyCFunction)AES_CTR_crypt_into, METH_VARARGS, "Encrypt/Decrypt writable buffer in-place"},
     {"set_iv", (PyCFunction)AES_CTR_set_iv, METH_VARARGS | METH_KEYWORDS, "Set IV and/or CTR"},
     {NULL}
 };
@@ -311,9 +376,47 @@ static PyObject* AES_GCM_decrypt(AES_GCMObject *self, PyObject *args, PyObject *
     return out;
 }
 
+static PyObject* AES_GCM_encrypt_into(AES_GCMObject *self, PyObject *args, PyObject *kwds) {
+    Py_buffer buf;
+    const char *aad = NULL;
+    Py_ssize_t aad_len = 0;
+    int tag_len = 16;
+    static char *kwlist[] = {"data", "aad", "tag_len", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "w*|y#i", kwlist, &buf, &aad, &aad_len, &tag_len)) return NULL;
+
+    PyObject *tag = PyBytes_FromStringAndSize(NULL, tag_len);
+    if (!tag) { PyBuffer_Release(&buf); return NULL; }
+
+    AES_GCM_Encrypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len,
+                          (const uint8_t*)aad, (uint32_t)aad_len,
+                          (uint8_t*)PyBytes_AS_STRING(tag), (uint8_t)tag_len);
+    PyBuffer_Release(&buf);
+    return tag;
+}
+
+static PyObject* AES_GCM_decrypt_into(AES_GCMObject *self, PyObject *args, PyObject *kwds) {
+    Py_buffer buf;
+    const char *aad = NULL, *tag;
+    Py_ssize_t aad_len = 0, tag_len;
+    static char *kwlist[] = {"data", "tag", "aad", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "w*y#|y#", kwlist, &buf, &tag, &tag_len, &aad, &aad_len)) return NULL;
+
+    bool ok = AES_GCM_Decrypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len,
+                                    (const uint8_t*)aad, (uint32_t)aad_len,
+                                    (const uint8_t*)tag, (uint8_t)tag_len);
+    PyBuffer_Release(&buf);
+    if (!ok) {
+        PyErr_SetString(PyExc_ValueError, "GCM authentication failed");
+        return NULL;
+    }
+    Py_RETURN_NONE;
+}
+
 static PyMethodDef AES_GCM_methods[] = {
-    {"encrypt", (PyCFunction)AES_GCM_encrypt, METH_VARARGS | METH_KEYWORDS, "Encrypt data in GCM mode"},
-    {"decrypt", (PyCFunction)AES_GCM_decrypt, METH_VARARGS | METH_KEYWORDS, "Decrypt data in GCM mode"},
+    {"encrypt", (PyCFunction)AES_GCM_encrypt, METH_VARARGS | METH_KEYWORDS, "Encrypt data in GCM mode (returns new bytes tuple)"},
+    {"decrypt", (PyCFunction)AES_GCM_decrypt, METH_VARARGS | METH_KEYWORDS, "Decrypt data in GCM mode (returns new bytes)"},
+    {"encrypt_into", (PyCFunction)AES_GCM_encrypt_into, METH_VARARGS | METH_KEYWORDS, "Encrypt buffer in-place, return tag"},
+    {"decrypt_into", (PyCFunction)AES_GCM_decrypt_into, METH_VARARGS | METH_KEYWORDS, "Decrypt buffer in-place, verify tag"},
     {"set_iv", (PyCFunction)AES_GCM_set_iv, METH_VARARGS, "Set IV"},
     {NULL}
 };
