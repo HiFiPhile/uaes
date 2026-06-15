@@ -43,7 +43,6 @@ extern "C" {
 #define AES_KEYEXPLEN_256 240
 #define AES_CTR_IVLEN 12
 #define AES_GCM_IVLEN 12
-#define AES_GCM_TABLELEN 480
 
 #define AES_CTR_Encrypt(Ctx, Buf, Length) AES_CTR_Crypt(Ctx, Buf, Length)
 #define AES_CTR_Decrypt(Ctx, Buf, Length) AES_CTR_Crypt(Ctx, Buf, Length)
@@ -54,24 +53,31 @@ typedef enum AES_Mode_t {
     AES_Mode_192,
     AES_Mode_256
 } AES_Mode_t;
+/* 32-bit aligned AES block storage. */
+typedef union AES_Block_t {
+    uint32_t words[4];
+    uint8_t bytes[AES_BLOCKLEN];
+    uint8_t matrix[4][4];
+} AES_Block_t;
 /* AES context */
 typedef struct AES_Ctx_t {
-    uint8_t RoundKey[AES_KEYEXPLEN_256];
-    uint8_t Iv[AES_BLOCKLEN];
+    uint32_t RoundKey[AES_KEYEXPLEN_256 / 4];
+    AES_Block_t Iv;
     AES_Mode_t Mode;
 } AES_Ctx_t;
 /* AES-GCM context */
 typedef struct AES_GCM_Ctx_t {
-    uint8_t Table[AES_GCM_TABLELEN];
-    uint8_t RoundKey[AES_KEYEXPLEN_256];
-    uint8_t Iv[AES_GCM_IVLEN];
+    AES_Block_t KeyDataHi[15];
+    AES_Block_t KeyDataLo[15];
+    uint32_t RoundKey[AES_KEYEXPLEN_256 / 4];
+    AES_Block_t Iv;
     AES_Mode_t Mode;
 } AES_GCM_Ctx_t;
 /* AES CMAC context */
 typedef struct AES_CMAC_Ctx_t {
-    uint8_t K1[AES_KEYLEN_128];
-    uint8_t K2[AES_KEYLEN_128];
-    uint8_t RoundKey[AES_KEYEXPLEN_256];
+    AES_Block_t K1;
+    AES_Block_t K2;
+    uint32_t RoundKey[AES_KEYEXPLEN_256 / 4];
     AES_Mode_t Mode;
 } AES_CMAC_Ctx_t;
 /* Exported constants --------------------------------------------------------*/
@@ -248,7 +254,7 @@ void AES_GCM_Encrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
  * @param 		  	AADLen	AAD length.
  * @param [out]	    Tag   	Authentication tag.
  * @param 		  	TagLen	Tag length.
- * 
+ *
  * @retval  True if tag verified, otherwise false.
  */
 bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const uint8_t *AAD, uint32_t AADLen, const uint8_t *Tag, uint8_t TagLen);

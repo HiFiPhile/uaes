@@ -28,59 +28,8 @@
 #include <stdbool.h>
 #include <string.h>
 
-static inline void set_uint32_be(uint8_t *dst, uint32_t val) {
-    dst[0] = (uint8_t) ((val >> 24) & 0xFF);
-    dst[1] = (uint8_t) ((val >> 16) & 0xFF);
-    dst[2] = (uint8_t) ((val >> 8) & 0xFF);
-    dst[3] = (uint8_t) (val & 0xFF);
-}
-
 /* Private typedef -----------------------------------------------------------*/
-/* AES state - array holding the intermediate results during decryption. */
-typedef uint8_t AES_state_t[4][4];
-/* This struct is basically to enable big-integer calculations in the 128-bit Galois field. */
-typedef union {
-    uint32_t element[4];
-    uint8_t bytes[AES_BLOCKLEN];
-} AES_gcm_t;
 /* Precalculated GF table */
-typedef struct
-{
-    AES_gcm_t keyDataHi[15];
-    AES_gcm_t keyDataLo[15];
-} AES_gcm_mul_table_t;
-/* Union for GCM IV increment */
-typedef union {
-    uint32_t w[4];
-    uint8_t bytes[AES_BLOCKLEN];
-} AES_96b_iv_t;
-/* Union for GCM final hash */
-typedef union {
-    uint32_t w[4];
-    uint8_t bytes[AES_BLOCKLEN];
-} AES_gcm_lenhash_t;
-
-/* Inline helpers for 32-bit operations on ARM */
-static inline void AES_BlockCopy(void *dst, const void *src) {
-    ((uint32_t *)dst)[0] = ((const uint32_t *)src)[0];
-    ((uint32_t *)dst)[1] = ((const uint32_t *)src)[1];
-    ((uint32_t *)dst)[2] = ((const uint32_t *)src)[2];
-    ((uint32_t *)dst)[3] = ((const uint32_t *)src)[3];
-}
-
-static inline void AES_BlockSetZero(void *dst) {
-    ((uint32_t *)dst)[0] = 0;
-    ((uint32_t *)dst)[1] = 0;
-    ((uint32_t *)dst)[2] = 0;
-    ((uint32_t *)dst)[3] = 0;
-}
-
-static inline void AES_Copy12B(void *dst, const void *src) {
-    ((uint32_t *)dst)[0] = ((const uint32_t *)src)[0];
-    ((uint32_t *)dst)[1] = ((const uint32_t *)src)[1];
-    ((uint32_t *)dst)[2] = ((const uint32_t *)src)[2];
-}
-
 /* Private define ------------------------------------------------------------*/
 /* The number of columns comprising a state in AES. This is a constant in AES. Value=4 */
 #define AES_Nb 4
@@ -104,6 +53,7 @@ static const uint8_t AES_sbox[256] = {
     0x3e, 0xb5, 0x66, 0x48, 0x03, 0xf6, 0x0e, 0x61, 0x35, 0x57, 0xb9, 0x86, 0xc1, 0x1d, 0x9e, 0xe1, 0xf8, 0x98, 0x11,
     0x69, 0xd9, 0x8e, 0x94, 0x9b, 0x1e, 0x87, 0xe9, 0xce, 0x55, 0x28, 0xdf, 0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42,
     0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16};
+
 /* AES Rijndael Reversed S-box */
 static const uint8_t AES_rsbox[256] = {
     0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb, 0x7c, 0xe3, 0x39,
@@ -120,6 +70,7 @@ static const uint8_t AES_rsbox[256] = {
     0x51, 0x7f, 0xa9, 0x19, 0xb5, 0x4a, 0x0d, 0x2d, 0xe5, 0x7a, 0x9f, 0x93, 0xc9, 0x9c, 0xef, 0xa0, 0xe0, 0x3b, 0x4d,
     0xae, 0x2a, 0xf5, 0xb0, 0xc8, 0xeb, 0xbb, 0x3c, 0x83, 0x53, 0x99, 0x61, 0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6,
     0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d};
+
 /* The round constant word array, AES_Rcon[i], contains the values given by
    x to the power (i-1) being powers of x (x is denoted as {02}) in the field GF(2^8) */
 static const uint8_t AES_Rcon[11] = {0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36};
@@ -158,26 +109,56 @@ static const uint16_t AES_reduce_table[256] = {
     0xD0A7u, 0x12A6u, 0x54A4u, 0x96A5u, 0xD8A0u, 0x1AA1u, 0x5CA3u, 0x9EA2u,
     0xE0B5u, 0x22B4u, 0x64B6u, 0xA6B7u, 0xE8B2u, 0x2AB3u, 0x6CB1u, 0xAEB0u,
     0xF0BBu, 0x32BAu, 0x74B8u, 0xB6B9u, 0xF8BCu, 0x3ABDu, 0x7CBFu, 0xBEBEu};
+
 /* Private function prototypes -----------------------------------------------*/
 static void AES_KeyExpansion(uint8_t *RoundKey, const uint8_t *Key, AES_Mode_t Mode);
-static void AES_AddRoundKey(uint8_t round, AES_state_t *state, const uint8_t *RoundKey);
+static void AES_AddRoundKey(uint8_t round, AES_Block_t *state, const AES_Block_t *RoundKey);
 static uint8_t AES_xtime(uint8_t x);
-static void AES_SubBytes(AES_state_t *state);
-static void AES_ShiftRows(AES_state_t *state);
-static void AES_MixColumns(AES_state_t *state);
-static void AES_InvShiftRows(AES_state_t *state);
-static void AES_InvSubBytes(AES_state_t *state);
-static void AES_InvMixColumns(AES_state_t *state);
-static void AES_BlockXor(const uint8_t *in1, const uint8_t *in2, uint8_t *out);
-static void AES_Cipher(AES_state_t *state, const uint8_t *RoundKey, AES_Mode_t Mode);
-static void AES_InvCipher(AES_state_t *state, const uint8_t *RoundKey, AES_Mode_t Mode);
-static void AES_GCM_TableInit(AES_gcm_mul_table_t *Table, const uint8_t Key[AES_BLOCKLEN]);
-static void AES_GCM_Mul(uint8_t Block[AES_BLOCKLEN], const AES_gcm_mul_table_t *Table);
-static void AES_GCM_ByteToStruct(AES_gcm_t *Dst, const uint8_t Src[AES_BLOCKLEN]);
-static void AES_GCM_StructToByte(uint8_t Dst[AES_BLOCKLEN], const AES_gcm_t *Src);
-static void AES_GCM_GFMul2(AES_gcm_t *p);
-static void AES_GCM_GFMul256(AES_gcm_t *p);
+static void AES_SubBytes(AES_Block_t *state);
+static void AES_ShiftRows(AES_Block_t *state);
+static void AES_MixColumns(AES_Block_t *state);
+static void AES_InvShiftRows(AES_Block_t *state);
+static void AES_InvSubBytes(AES_Block_t *state);
+static void AES_InvMixColumns(AES_Block_t *state);
+static void AES_Cipher(AES_Block_t *state, const uint32_t *RoundKey, AES_Mode_t Mode);
+static void AES_InvCipher(AES_Block_t *state, const uint32_t *RoundKey, AES_Mode_t Mode);
+static void AES_GCM_TableInit(AES_GCM_Ctx_t *Ctx, const AES_Block_t *Key);
+static void AES_GCM_Mul(AES_Block_t *Block, const AES_GCM_Ctx_t *Ctx);
+static void AES_GCM_GFMul2(AES_Block_t *p);
+static void AES_GCM_GFMul256(AES_Block_t *p);
+
 /* Private functions ---------------------------------------------------------*/
+
+/* Inline helpers for aligned 32-bit block operations. */
+static inline void AES_BlockCopy(AES_Block_t *dst, const AES_Block_t *src) {
+    dst->words[0] = src->words[0];
+    dst->words[1] = src->words[1];
+    dst->words[2] = src->words[2];
+    dst->words[3] = src->words[3];
+}
+
+static inline void AES_Copy12B(AES_Block_t *dst, const AES_Block_t *src) {
+    dst->words[0] = src->words[0];
+    dst->words[1] = src->words[1];
+    dst->words[2] = src->words[2];
+}
+
+static inline const AES_Block_t *AES_RoundKeyBlocks(const uint32_t *RoundKey) {
+    return (const AES_Block_t *) (const void *) RoundKey;
+}
+
+static inline void AES_BlockXor(const AES_Block_t *in1, const AES_Block_t *in2, AES_Block_t *out) {
+    for (uint_fast8_t i = 0; i < 4; ++i) {
+        out->words[i] = in1->words[i] ^ in2->words[i];
+    }
+}
+
+static inline void Set_Uint32_BE(uint8_t *dst, uint32_t val) {
+    dst[0] = (uint8_t) ((val >> 24) & 0xFF);
+    dst[1] = (uint8_t) ((val >> 16) & 0xFF);
+    dst[2] = (uint8_t) ((val >> 8) & 0xFF);
+    dst[3] = (uint8_t) (val & 0xFF);
+}
 
 /**
  * @fn	void AES_Init_Ctx(AES_Ctx_t* Ctx, const uint8_t* Key, AES_Mode_t Mode)
@@ -189,7 +170,7 @@ static void AES_GCM_GFMul256(AES_gcm_t *p);
  * @param 		  	Mode	The mode.
  */
 void AES_Init_Ctx(AES_Ctx_t *Ctx, const uint8_t *Key, AES_Mode_t Mode) {
-    AES_KeyExpansion(Ctx->RoundKey, Key, Mode);
+    AES_KeyExpansion((uint8_t *)Ctx->RoundKey, Key, Mode);
     Ctx->Mode = Mode;
 }
 
@@ -204,9 +185,9 @@ void AES_Init_Ctx(AES_Ctx_t *Ctx, const uint8_t *Key, AES_Mode_t Mode) {
  * @param 		  	Mode	The mode.
  */
 void AES_Init_Ctx_Iv(AES_Ctx_t *Ctx, const uint8_t *Key, const uint8_t *Iv, AES_Mode_t Mode) {
-    AES_KeyExpansion(Ctx->RoundKey, Key, Mode);
+    AES_KeyExpansion((uint8_t *)Ctx->RoundKey, Key, Mode);
     Ctx->Mode = Mode;
-    AES_BlockCopy(Ctx->Iv, Iv);
+    memcpy(&Ctx->Iv, Iv, AES_BLOCKLEN);
 }
 
 /**
@@ -218,7 +199,7 @@ void AES_Init_Ctx_Iv(AES_Ctx_t *Ctx, const uint8_t *Key, const uint8_t *Iv, AES_
  * @param 		  	Iv 	Initial vector.
  */
 void AES_Ctx_Set_Iv(AES_Ctx_t *Ctx, const uint8_t *Iv) {
-    AES_BlockCopy(Ctx->Iv, Iv);
+    memcpy(&Ctx->Iv, Iv, AES_BLOCKLEN);
 }
 
 /**
@@ -230,8 +211,8 @@ void AES_Ctx_Set_Iv(AES_Ctx_t *Ctx, const uint8_t *Iv) {
  * @param 		  	Iv 	Initial vector.
  */
 void AES_CTR_Ctx_Set_Iv(AES_Ctx_t *Ctx, const uint8_t *Iv, uint32_t Ctr) {
-    AES_Copy12B(Ctx->Iv, Iv);
-    set_uint32_be(&Ctx->Iv[12], Ctr);
+    memcpy(&Ctx->Iv, Iv, AES_CTR_IVLEN);
+    Set_Uint32_BE(&Ctx->Iv.bytes[12], Ctr);
 }
 
 /**
@@ -243,33 +224,30 @@ void AES_CTR_Ctx_Set_Iv(AES_Ctx_t *Ctx, const uint8_t *Iv, uint32_t Ctr) {
  * @param 		  	Key 	AES key.
  */
 void AES_CMAC_Init(AES_CMAC_Ctx_t *Ctx, const uint8_t *Key, AES_Mode_t Mode) {
-    uint32_t L_w[4];
-    uint8_t *L = (uint8_t *)L_w;
-
-    AES_BlockSetZero(L);
+    AES_Block_t L = {0};
 
     Ctx->Mode = Mode;
-    AES_KeyExpansion(Ctx->RoundKey, Key, Mode);
-    AES_Cipher((AES_state_t *) L, Ctx->RoundKey, Mode);
+    AES_KeyExpansion((uint8_t *)Ctx->RoundKey, Key, Mode);
+    AES_Cipher(&L, Ctx->RoundKey, Mode);
 
     uint8_t ovf = 0;
     for (int i = AES_KEYLEN_128 - 1; i >= 0; i--) {
-        Ctx->K1[i] = L[i] << 1;
-        Ctx->K1[i] |= ovf;
-        ovf = (L[i] & 0x80) ? 1 : 0;
+        Ctx->K1.bytes[i] = L.bytes[i] << 1;
+        Ctx->K1.bytes[i] |= ovf;
+        ovf = (L.bytes[i] & 0x80) ? 1 : 0;
     }
-    if (L[0] & 0x80) {
-        Ctx->K1[AES_KEYLEN_128 - 1] ^= 0x87;
+    if (L.bytes[0] & 0x80) {
+        Ctx->K1.bytes[AES_KEYLEN_128 - 1] ^= 0x87;
     }
 
     ovf = 0;
     for (int i = AES_KEYLEN_128 - 1; i >= 0; i--) {
-        Ctx->K2[i] = Ctx->K1[i] << 1;
-        Ctx->K2[i] |= ovf;
-        ovf = (Ctx->K1[i] & 0x80) ? 1 : 0;
+        Ctx->K2.bytes[i] = Ctx->K1.bytes[i] << 1;
+        Ctx->K2.bytes[i] |= ovf;
+        ovf = (Ctx->K1.bytes[i] & 0x80) ? 1 : 0;
     }
-    if (Ctx->K1[0] & 0x80) {
-        Ctx->K2[AES_KEYLEN_128 - 1] ^= 0x87;
+    if (Ctx->K1.bytes[0] & 0x80) {
+        Ctx->K2.bytes[AES_KEYLEN_128 - 1] ^= 0x87;
     }
 }
 
@@ -283,8 +261,11 @@ void AES_CMAC_Init(AES_CMAC_Ctx_t *Ctx, const uint8_t *Key, AES_Mode_t Mode) {
  * @param 		  	Length	The length.
  */
 void AES_ECB_Encrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
+    AES_Block_t work_block;
     for (uint32_t i = 0; i < Length; i += AES_BLOCKLEN) {
-        AES_Cipher((AES_state_t *) Buf, Ctx->RoundKey, Ctx->Mode);
+        memcpy(&work_block, Buf, AES_BLOCKLEN);
+        AES_Cipher(&work_block, Ctx->RoundKey, Ctx->Mode);
+        memcpy(Buf, &work_block, AES_BLOCKLEN);
         Buf += AES_BLOCKLEN;
     }
 }
@@ -299,8 +280,11 @@ void AES_ECB_Encrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
  * @param 		  	Length	The length.
  */
 void AES_ECB_Decrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
+    AES_Block_t work_block;
     for (uint32_t i = 0; i < Length; i += AES_BLOCKLEN) {
-        AES_InvCipher((AES_state_t *) Buf, Ctx->RoundKey, Ctx->Mode);
+        memcpy(&work_block, Buf, AES_BLOCKLEN);
+        AES_InvCipher(&work_block, Ctx->RoundKey, Ctx->Mode);
+        memcpy(Buf, &work_block, AES_BLOCKLEN);
         Buf += AES_BLOCKLEN;
     }
 }
@@ -315,15 +299,15 @@ void AES_ECB_Decrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
  * @param 		  	Length	The length.
  */
 void AES_CBC_Encrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
-    uint8_t *Iv = Ctx->Iv;
+    AES_Block_t work_block;
     for (uint32_t i = 0; i < Length; i += AES_BLOCKLEN) {
-        AES_BlockXor(Buf, Iv, Buf);
-        AES_Cipher((AES_state_t *) Buf, Ctx->RoundKey, Ctx->Mode);
-        Iv = Buf;
+        memcpy(&work_block, Buf, AES_BLOCKLEN);
+        AES_BlockXor(&work_block, &Ctx->Iv, &work_block);
+        AES_Cipher(&work_block, Ctx->RoundKey, Ctx->Mode);
+        memcpy(Buf, &work_block, AES_BLOCKLEN);
+        AES_BlockCopy(&Ctx->Iv, &work_block);
         Buf += AES_BLOCKLEN;
     }
-    /* store Iv in Ctx for next call */
-    AES_BlockCopy(Ctx->Iv, Iv);
 }
 
 /**
@@ -336,13 +320,15 @@ void AES_CBC_Encrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
  * @param 		  	Length	The length.
  */
 void AES_CBC_Decrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
-    uint32_t storeNextIv_w[4];
-    uint8_t *storeNextIv = (uint8_t *)storeNextIv_w;
+    AES_Block_t storeNextIv;
+    AES_Block_t work_block;
     for (uint32_t i = 0; i < Length; i += AES_BLOCKLEN) {
-        AES_BlockCopy(storeNextIv, Buf);
-        AES_InvCipher((AES_state_t *) Buf, Ctx->RoundKey, Ctx->Mode);
-        AES_BlockXor(Buf, Ctx->Iv, Buf);
-        AES_BlockCopy(Ctx->Iv, storeNextIv);
+        memcpy(&storeNextIv, Buf, AES_BLOCKLEN);
+        memcpy(&work_block, Buf, AES_BLOCKLEN);
+        AES_InvCipher(&work_block, Ctx->RoundKey, Ctx->Mode);
+        AES_BlockXor(&work_block, &Ctx->Iv, &work_block);
+        memcpy(Buf, &work_block, AES_BLOCKLEN);
+        AES_BlockCopy(&Ctx->Iv, &storeNextIv);
         Buf += AES_BLOCKLEN;
     }
 }
@@ -357,32 +343,34 @@ void AES_CBC_Decrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
  * @param 		  	Length	Data length.
  */
 void AES_CTR_Crypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
-    uint32_t buffer_w[4];
-    uint8_t *buffer = (uint8_t *)buffer_w;
+    AES_Block_t buffer;
+    AES_Block_t work_block;
     /* Reconstruct big-endian 32-bit counter from IV bytes 12..15 */
-    uint32_t ctr = ((uint32_t) Ctx->Iv[12] << 24) | ((uint32_t) Ctx->Iv[13] << 16) |
-                   ((uint32_t) Ctx->Iv[14] << 8) | (uint32_t) Ctx->Iv[15];
+    uint32_t ctr = ((uint32_t) Ctx->Iv.bytes[12] << 24) | ((uint32_t) Ctx->Iv.bytes[13] << 16) |
+                   ((uint32_t) Ctx->Iv.bytes[14] << 8) | (uint32_t) Ctx->Iv.bytes[15];
 
     /* Process full 16-byte blocks */
     while (Length >= AES_BLOCKLEN) {
-        AES_BlockCopy(buffer, Ctx->Iv);
-        AES_Cipher((AES_state_t *) buffer, Ctx->RoundKey, Ctx->Mode);
-        AES_BlockXor(Buf, buffer, Buf);
+        AES_BlockCopy(&buffer, &Ctx->Iv);
+        AES_Cipher(&buffer, Ctx->RoundKey, Ctx->Mode);
+        memcpy(&work_block, Buf, AES_BLOCKLEN);
+        AES_BlockXor(&work_block, &buffer, &work_block);
+        memcpy(Buf, &work_block, AES_BLOCKLEN);
         ctr++;
-        set_uint32_be(&Ctx->Iv[12], ctr);
+        Set_Uint32_BE(&Ctx->Iv.bytes[12], ctr);
         Buf += AES_BLOCKLEN;
         Length -= AES_BLOCKLEN;
     }
 
     /* Handle remaining partial block */
     if (Length > 0) {
-        AES_BlockCopy(buffer, Ctx->Iv);
-        AES_Cipher((AES_state_t *) buffer, Ctx->RoundKey, Ctx->Mode);
+        AES_BlockCopy(&buffer, &Ctx->Iv);
+        AES_Cipher(&buffer, Ctx->RoundKey, Ctx->Mode);
         for (uint32_t i = 0; i < Length; i++) {
-            Buf[i] ^= buffer[i];
+            Buf[i] ^= buffer.bytes[i];
         }
         ctr++;
-        set_uint32_be(&Ctx->Iv[12], ctr);
+        Set_Uint32_BE(&Ctx->Iv.bytes[12], ctr);
     }
 }
 
@@ -399,9 +387,9 @@ void AES_CTR_Crypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
  * @param 		  	MacLen	Mac length.
  */
 void AES_CMAC(AES_CMAC_Ctx_t *Ctx, const uint8_t *Data, uint32_t DataLen, uint8_t *Mac, uint_fast8_t MacLen) {
-    uint32_t X_w[4];
-    uint8_t *X = (uint8_t *)X_w;
-    uint8_t M_last[AES_BLOCKLEN];
+    AES_Block_t X = {0};
+    AES_Block_t M_last;
+    AES_Block_t block;
     uint32_t n, i;
     bool flag;
     n = (DataLen + AES_BLOCKLEN - 1) / AES_BLOCKLEN; /* n is number of rounds */
@@ -418,32 +406,33 @@ void AES_CMAC(AES_CMAC_Ctx_t *Ctx, const uint8_t *Data, uint32_t DataLen, uint8_
     }
 
     if (flag) { /* last block is complete block */
-        AES_BlockXor(&Data[AES_BLOCKLEN * (n - 1)], Ctx->K1, M_last);
+        memcpy(&M_last, &Data[AES_BLOCKLEN * (n - 1)], AES_BLOCKLEN);
+        AES_BlockXor(&M_last, &Ctx->K1, &M_last);
     } else {
         uint32_t last = DataLen % AES_BLOCKLEN;
         for (i = 0; i < last; i++) {
-            M_last[i] = Data[AES_BLOCKLEN * (n - 1) + i];
+            M_last.bytes[i] = Data[AES_BLOCKLEN * (n - 1) + i];
         }
-        M_last[last] = 0x80;
+        M_last.bytes[last] = 0x80;
         for (i = last + 1; i < AES_BLOCKLEN; i++) {
-            M_last[i] = 0;
+            M_last.bytes[i] = 0;
         }
-        AES_BlockXor(M_last, Ctx->K2, M_last);
+        AES_BlockXor(&M_last, &Ctx->K2, &M_last);
     }
 
-    AES_BlockSetZero(X);
     for (i = 0; i < n - 1; i++) {
-        AES_BlockXor(X, &Data[AES_BLOCKLEN * i], X);             /* Y := Mi (+) X  */
-        AES_Cipher((AES_state_t *) X, Ctx->RoundKey, Ctx->Mode); /* X := AES-128(KEY, Y); */
+        memcpy(&block, &Data[AES_BLOCKLEN * i], AES_BLOCKLEN);
+        AES_BlockXor(&X, &block, &X); /* Y := Mi (+) X */
+        AES_Cipher(&X, Ctx->RoundKey, Ctx->Mode);
     }
 
-    AES_BlockXor(X, M_last, X);
-    AES_Cipher((AES_state_t *) X, Ctx->RoundKey, Ctx->Mode);
+    AES_BlockXor(&X, &M_last, &X);
+    AES_Cipher(&X, Ctx->RoundKey, Ctx->Mode);
 
     if (MacLen > AES_BLOCKLEN)
         MacLen = AES_BLOCKLEN;
 
-    memcpy(Mac, X, MacLen);
+    memcpy(Mac, &X, MacLen);
 }
 
 /**
@@ -536,7 +525,7 @@ static void AES_KeyExpansion(uint8_t *RoundKey, const uint8_t *Key, AES_Mode_t M
 }
 
 /**
- * @fn	static void AES_AddRoundKey(uint8_t round, AES_state_t* state, uint8_t* RoundKey)
+ * @fn	static void AES_AddRoundKey(uint8_t round, AES_Block_t * state, AES_Block_t* RoundKey)
  *
  * @brief	Adds the round key to state. The round key is added to the state by an XOR function.
  *
@@ -544,14 +533,14 @@ static void AES_KeyExpansion(uint8_t *RoundKey, const uint8_t *Key, AES_Mode_t M
  * @param [in,out]	state   	If non-null, the state.
  * @param [in,out]	RoundKey	If non-null, the round key.
  */
-static void AES_AddRoundKey(uint8_t round, AES_state_t *state, const uint8_t *RoundKey) {
-    /* Direct 32-bit XOR per column — avoids memcpy overhead on ARM */
-    const uint32_t *rk = (const uint32_t *)&RoundKey[round * AES_Nb * 4];
-    uint32_t *st = (uint32_t *)(*state);
-    st[0] ^= rk[0];
-    st[1] ^= rk[1];
-    st[2] ^= rk[2];
-    st[3] ^= rk[3];
+static void AES_AddRoundKey(uint8_t round, AES_Block_t *state, const AES_Block_t *RoundKey) {
+    const AES_Block_t *round_block = &RoundKey[round];
+
+    for (uint_fast8_t col = 0; col < 4; ++col) {
+        for (uint_fast8_t row = 0; row < 4; ++row) {
+            state->matrix[col][row] ^= round_block->matrix[col][row];
+        }
+    }
 }
 
 static uint8_t AES_xtime(uint8_t x) {
@@ -559,149 +548,149 @@ static uint8_t AES_xtime(uint8_t x) {
 }
 
 /**
- * @fn	static void AES_SubBytes(AES_state_t* state)
+ * @fn	static void AES_SubBytes(AES_Block_t * state)
  *
  * @brief	Substitutes the values in the state matrix with values in an S-box.
  *
  * @param [in,out]	state	If non-null, the state.
  */
-static void AES_SubBytes(AES_state_t *state) {
+static void AES_SubBytes(AES_Block_t *state) {
     uint8_t i, j;
     for (i = 0; i < 4; ++i) {
         for (j = 0; j < 4; ++j) {
-            (*state)[j][i] = AES_sbox[(*state)[j][i]];
+            state->matrix[j][i] = AES_sbox[state->matrix[j][i]];
         }
     }
 }
 
 /**
- * @fn	static void AES_ShiftRows(AES_state_t* state)
+ * @fn	static void AES_ShiftRows(AES_Block_t * state)
  *
  * @brief	Shifts the rows in the state to the left. Each row is
  * 			shifted with different offset. Offset = Row number. So the first row is not shifted.
  *
  * @param [in,out]	state	If non-null, the state.
  */
-static void AES_ShiftRows(AES_state_t *state) {
+static void AES_ShiftRows(AES_Block_t *state) {
     uint8_t temp;
 
     // Rotate first row 1 columns to left
-    temp = (*state)[0][1];
-    (*state)[0][1] = (*state)[1][1];
-    (*state)[1][1] = (*state)[2][1];
-    (*state)[2][1] = (*state)[3][1];
-    (*state)[3][1] = temp;
+    temp = state->matrix[0][1];
+    state->matrix[0][1] = state->matrix[1][1];
+    state->matrix[1][1] = state->matrix[2][1];
+    state->matrix[2][1] = state->matrix[3][1];
+    state->matrix[3][1] = temp;
 
     // Rotate second row 2 columns to left
-    temp = (*state)[0][2];
-    (*state)[0][2] = (*state)[2][2];
-    (*state)[2][2] = temp;
+    temp = state->matrix[0][2];
+    state->matrix[0][2] = state->matrix[2][2];
+    state->matrix[2][2] = temp;
 
-    temp = (*state)[1][2];
-    (*state)[1][2] = (*state)[3][2];
-    (*state)[3][2] = temp;
+    temp = state->matrix[1][2];
+    state->matrix[1][2] = state->matrix[3][2];
+    state->matrix[3][2] = temp;
 
     // Rotate third row 3 columns to left
-    temp = (*state)[0][3];
-    (*state)[0][3] = (*state)[3][3];
-    (*state)[3][3] = (*state)[2][3];
-    (*state)[2][3] = (*state)[1][3];
-    (*state)[1][3] = temp;
+    temp = state->matrix[0][3];
+    state->matrix[0][3] = state->matrix[3][3];
+    state->matrix[3][3] = state->matrix[2][3];
+    state->matrix[2][3] = state->matrix[1][3];
+    state->matrix[1][3] = temp;
 }
 
 /**
- * @fn	static void AES_MixColumns(AES_state_t* state)
+ * @fn	static void AES_MixColumns(AES_Block_t * state)
  *
  * @brief	Mixes the columns of the state matrix
  *
  * @param [in,out]	state	If non-null, the state.
  */
-static void AES_MixColumns(AES_state_t *state) {
+static void AES_MixColumns(AES_Block_t *state) {
     uint8_t i;
     uint8_t Tmp, Tm, t;
     for (i = 0; i < 4; ++i) {
-        t = (*state)[i][0];
-        Tmp = (*state)[i][0] ^ (*state)[i][1] ^ (*state)[i][2] ^ (*state)[i][3];
-        Tm = (*state)[i][0] ^ (*state)[i][1];
+        t = state->matrix[i][0];
+        Tmp = state->matrix[i][0] ^ state->matrix[i][1] ^ state->matrix[i][2] ^ state->matrix[i][3];
+        Tm = state->matrix[i][0] ^ state->matrix[i][1];
         Tm = AES_xtime(Tm);
-        (*state)[i][0] ^= Tm ^ Tmp;
-        Tm = (*state)[i][1] ^ (*state)[i][2];
+        state->matrix[i][0] ^= Tm ^ Tmp;
+        Tm = state->matrix[i][1] ^ state->matrix[i][2];
         Tm = AES_xtime(Tm);
-        (*state)[i][1] ^= Tm ^ Tmp;
-        Tm = (*state)[i][2] ^ (*state)[i][3];
+        state->matrix[i][1] ^= Tm ^ Tmp;
+        Tm = state->matrix[i][2] ^ state->matrix[i][3];
         Tm = AES_xtime(Tm);
-        (*state)[i][2] ^= Tm ^ Tmp;
-        Tm = (*state)[i][3] ^ t;
+        state->matrix[i][2] ^= Tm ^ Tmp;
+        Tm = state->matrix[i][3] ^ t;
         Tm = AES_xtime(Tm);
-        (*state)[i][3] ^= Tm ^ Tmp;
+        state->matrix[i][3] ^= Tm ^ Tmp;
     }
 }
 
 /**
- * @fn	static void AES_InvShiftRows(AES_state_t* state)
+ * @fn	static void AES_InvShiftRows(AES_Block_t * state)
  *
  * @brief	AES inverse shift rows
  *
  * @param [in,out]	state	If non-null, the state.
  */
-static void AES_InvShiftRows(AES_state_t *state) {
+static void AES_InvShiftRows(AES_Block_t *state) {
     uint8_t temp;
 
     // Rotate first row 1 columns to right
-    temp = (*state)[3][1];
-    (*state)[3][1] = (*state)[2][1];
-    (*state)[2][1] = (*state)[1][1];
-    (*state)[1][1] = (*state)[0][1];
-    (*state)[0][1] = temp;
+    temp = state->matrix[3][1];
+    state->matrix[3][1] = state->matrix[2][1];
+    state->matrix[2][1] = state->matrix[1][1];
+    state->matrix[1][1] = state->matrix[0][1];
+    state->matrix[0][1] = temp;
 
     // Rotate second row 2 columns to right
-    temp = (*state)[0][2];
-    (*state)[0][2] = (*state)[2][2];
-    (*state)[2][2] = temp;
+    temp = state->matrix[0][2];
+    state->matrix[0][2] = state->matrix[2][2];
+    state->matrix[2][2] = temp;
 
-    temp = (*state)[1][2];
-    (*state)[1][2] = (*state)[3][2];
-    (*state)[3][2] = temp;
+    temp = state->matrix[1][2];
+    state->matrix[1][2] = state->matrix[3][2];
+    state->matrix[3][2] = temp;
 
     // Rotate third row 3 columns to right
-    temp = (*state)[0][3];
-    (*state)[0][3] = (*state)[1][3];
-    (*state)[1][3] = (*state)[2][3];
-    (*state)[2][3] = (*state)[3][3];
-    (*state)[3][3] = temp;
+    temp = state->matrix[0][3];
+    state->matrix[0][3] = state->matrix[1][3];
+    state->matrix[1][3] = state->matrix[2][3];
+    state->matrix[2][3] = state->matrix[3][3];
+    state->matrix[3][3] = temp;
 }
 
 /**
- * @fn	static void AES_InvSubBytes(AES_state_t* state)
+ * @fn	static void AES_InvSubBytes(AES_Block_t * state)
  *
  * @brief	Substitutes the values in the state matrix with values in an S-box.
  *
  * @param [in,out]	state	If non-null, the state.
  */
-static void AES_InvSubBytes(AES_state_t *state) {
+static void AES_InvSubBytes(AES_Block_t *state) {
     uint8_t i, j;
     for (i = 0; i < 4; ++i) {
         for (j = 0; j < 4; ++j) {
-            (*state)[j][i] = AES_rsbox[(*state)[j][i]];
+            state->matrix[j][i] = AES_rsbox[state->matrix[j][i]];
         }
     }
 }
 
 /**
- * @fn	static void AES_InvMixColumns(AES_state_t* state)
+ * @fn	static void AES_InvMixColumns(AES_Block_t * state)
  *
  * @brief	AES_MixColumns function mixes the columns of the state matrix.
  *
  * @param [in,out]	state	If non-null, the state.
  */
-static void AES_InvMixColumns(AES_state_t *state) {
+static void AES_InvMixColumns(AES_Block_t *state) {
     int i;
     uint8_t a, b, c, d, T, X;
     for (i = 0; i < 4; ++i) {
-        a = (*state)[i][0];
-        b = (*state)[i][1];
-        c = (*state)[i][2];
-        d = (*state)[i][3];
+        a = state->matrix[i][0];
+        b = state->matrix[i][1];
+        c = state->matrix[i][2];
+        d = state->matrix[i][3];
 
         // Let "*" denotes polynomial multiplication modulo x^4+1 over GF(2^8)
         // Let "+" denotes polynimial addition over GF(2^8) (XOR)
@@ -720,34 +709,16 @@ static void AES_InvMixColumns(AES_state_t *state) {
         T = a ^ b ^ c ^ d;
         T ^= AES_xtime(AES_xtime(AES_xtime(T)));
         X = AES_xtime(AES_xtime(a ^ c));
-        (*state)[i][0] = T ^ X ^ AES_xtime(a ^ b) ^ a;
-        (*state)[i][2] = T ^ X ^ AES_xtime(c ^ d) ^ c;
+        state->matrix[i][0] = T ^ X ^ AES_xtime(a ^ b) ^ a;
+        state->matrix[i][2] = T ^ X ^ AES_xtime(c ^ d) ^ c;
         X = AES_xtime(AES_xtime(b ^ d));
-        (*state)[i][1] = T ^ X ^ AES_xtime(b ^ c) ^ b;
-        (*state)[i][3] = T ^ X ^ AES_xtime(d ^ a) ^ d;
+        state->matrix[i][1] = T ^ X ^ AES_xtime(b ^ c) ^ b;
+        state->matrix[i][3] = T ^ X ^ AES_xtime(d ^ a) ^ d;
     }
 }
 
 /**
- * @fn	static void AES_BlockXor(const uint8_t* in1, const uint8_t* in2, uint8_t* out)
- *
- * @brief	Block Exclusive-or
- *
- * @param [in]	in1	1st input.
- * @param [in]	in2 2nd input.
- * @param [out]	out output.
- *
- */
-static void AES_BlockXor(const uint8_t *in1, const uint8_t *in2, uint8_t *out) {
-    /* Direct 32-bit word XOR — all AES blocks are 4-byte aligned */
-    ((uint32_t *)out)[0] = ((const uint32_t *)in1)[0] ^ ((const uint32_t *)in2)[0];
-    ((uint32_t *)out)[1] = ((const uint32_t *)in1)[1] ^ ((const uint32_t *)in2)[1];
-    ((uint32_t *)out)[2] = ((const uint32_t *)in1)[2] ^ ((const uint32_t *)in2)[2];
-    ((uint32_t *)out)[3] = ((const uint32_t *)in1)[3] ^ ((const uint32_t *)in2)[3];
-}
-
-/**
- * @fn	static void AES_Cipher(AES_state_t* state, uint8_t* RoundKey, AES_Mode_t Mode)
+ * @fn	static void AES_Cipher(AES_Block_t * state, const uint32_t* RoundKey, AES_Mode_t Mode)
  *
  * @brief	AES_Cipher is the main function that encrypts the PlainText.
  *
@@ -755,7 +726,7 @@ static void AES_BlockXor(const uint8_t *in1, const uint8_t *in2, uint8_t *out) {
  * @param [in,out]	RoundKey	If non-null, the round key.
  * @param 		  	Mode		The mode.
  */
-static void AES_Cipher(AES_state_t *state, const uint8_t *RoundKey, AES_Mode_t Mode) {
+static void AES_Cipher(AES_Block_t *state, const uint32_t *RoundKey, AES_Mode_t Mode) {
     uint_fast8_t Nr;
     if (Mode == AES_Mode_128) {
         Nr = 10;
@@ -767,7 +738,7 @@ static void AES_Cipher(AES_state_t *state, const uint8_t *RoundKey, AES_Mode_t M
     uint8_t round = 0;
 
     // Add the First round key to the state before starting the rounds.
-    AES_AddRoundKey(0, state, RoundKey);
+    AES_AddRoundKey(0, state, AES_RoundKeyBlocks(RoundKey));
 
     // There will be Nr rounds.
     // The first Nr-1 rounds are identical.
@@ -776,18 +747,18 @@ static void AES_Cipher(AES_state_t *state, const uint8_t *RoundKey, AES_Mode_t M
         AES_SubBytes(state);
         AES_ShiftRows(state);
         AES_MixColumns(state);
-        AES_AddRoundKey(round, state, RoundKey);
+        AES_AddRoundKey(round, state, AES_RoundKeyBlocks(RoundKey));
     }
 
     // The last round is given below.
     // The AES_MixColumns function is not here in the last round.
     AES_SubBytes(state);
     AES_ShiftRows(state);
-    AES_AddRoundKey(Nr, state, RoundKey);
+    AES_AddRoundKey(Nr, state, AES_RoundKeyBlocks(RoundKey));
 }
 
 /**
- * @fn	static void AES_InvCipher(AES_state_t* state, uint8_t* RoundKey, AES_Mode_t Mode)
+ * @fn	static void AES_InvCipher(AES_Block_t * state, const uint32_t* RoundKey, AES_Mode_t Mode)
  *
  * @brief	AES inverse cipher.
  *
@@ -795,7 +766,7 @@ static void AES_Cipher(AES_state_t *state, const uint8_t *RoundKey, AES_Mode_t M
  * @param [in,out]	RoundKey	If non-null, the round key.
  * @param 		  	Mode		The mode.
  */
-static void AES_InvCipher(AES_state_t *state, const uint8_t *RoundKey, AES_Mode_t Mode) {
+static void AES_InvCipher(AES_Block_t *state, const uint32_t *RoundKey, AES_Mode_t Mode) {
     uint_fast8_t Nr;
     if (Mode == AES_Mode_128) {
         Nr = 10;
@@ -807,7 +778,7 @@ static void AES_InvCipher(AES_state_t *state, const uint8_t *RoundKey, AES_Mode_
     uint8_t round = 0;
 
     // Add the First round key to the state before starting the rounds.
-    AES_AddRoundKey(Nr, state, RoundKey);
+    AES_AddRoundKey(Nr, state, AES_RoundKeyBlocks(RoundKey));
 
     // There will be Nr rounds.
     // The first Nr-1 rounds are identical.
@@ -815,7 +786,7 @@ static void AES_InvCipher(AES_state_t *state, const uint8_t *RoundKey, AES_Mode_
     for (round = (Nr - 1); round > 0; --round) {
         AES_InvShiftRows(state);
         AES_InvSubBytes(state);
-        AES_AddRoundKey(round, state, RoundKey);
+        AES_AddRoundKey(round, state, AES_RoundKeyBlocks(RoundKey));
         AES_InvMixColumns(state);
     }
 
@@ -823,7 +794,7 @@ static void AES_InvCipher(AES_state_t *state, const uint8_t *RoundKey, AES_Mode_
     // The AES_MixColumns function is not here in the last round.
     AES_InvShiftRows(state);
     AES_InvSubBytes(state);
-    AES_AddRoundKey(0, state, RoundKey);
+    AES_AddRoundKey(0, state, AES_RoundKeyBlocks(RoundKey));
 }
 
 /**
@@ -836,15 +807,14 @@ static void AES_InvCipher(AES_state_t *state, const uint8_t *RoundKey, AES_Mode_
  * @param 		  	Mode	The mode.
  */
 void AES_GCM_Init_Ctx(AES_GCM_Ctx_t *Ctx, const uint8_t *Key, AES_Mode_t Mode) {
-    uint8_t ghash_work[AES_BLOCKLEN];
+    AES_Block_t ghash_work = {0};
 
-    AES_KeyExpansion(Ctx->RoundKey, Key, Mode);
+    AES_KeyExpansion((uint8_t *)Ctx->RoundKey, Key, Mode);
     Ctx->Mode = Mode;
 
-    memset(ghash_work, 0, AES_BLOCKLEN);
-    AES_Cipher((AES_state_t *) ghash_work, Ctx->RoundKey, Mode);
+    AES_Cipher(&ghash_work, Ctx->RoundKey, Mode);
 
-    AES_GCM_TableInit((AES_gcm_mul_table_t *) (uintptr_t) Ctx->Table, ghash_work);
+    AES_GCM_TableInit(Ctx, &ghash_work);
 }
 
 /**
@@ -856,7 +826,7 @@ void AES_GCM_Init_Ctx(AES_GCM_Ctx_t *Ctx, const uint8_t *Key, AES_Mode_t Mode) {
  * @param 		  	Iv  Initial vector.
  */
 void AES_GCM_Ctx_Set_Iv(AES_GCM_Ctx_t *Ctx, const uint8_t *Iv) {
-    AES_Copy12B(Ctx->Iv, Iv);
+    memcpy(&Ctx->Iv, Iv, AES_CTR_IVLEN);
 }
 
 /**
@@ -873,7 +843,7 @@ void AES_GCM_Ctx_Set_Iv(AES_GCM_Ctx_t *Ctx, const uint8_t *Iv) {
 void AES_GCM_Init_Ctx_Iv(AES_GCM_Ctx_t *Ctx, const uint8_t *Key, const uint8_t *Iv, AES_Mode_t Mode) {
     AES_GCM_Init_Ctx(Ctx, Key, Mode);
 
-    AES_Copy12B(Ctx->Iv, Iv);
+    memcpy(&Ctx->Iv, Iv, AES_CTR_IVLEN);
 }
 
 /**
@@ -890,37 +860,34 @@ void AES_GCM_Init_Ctx_Iv(AES_GCM_Ctx_t *Ctx, const uint8_t *Key, const uint8_t *
  * @param 		  	TagLen	Tag length.
  */
 void AES_GCM_Encrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const uint8_t *AAD, uint32_t AADLen, uint8_t *Tag, uint8_t TagLen) {
-    AES_96b_iv_t iv_block;
-    AES_gcm_lenhash_t ghash_lengths;
+    AES_Block_t iv_block;
+    AES_Block_t ghash_lengths = {0};
     uint8_t *p_data;
     uint32_t data_len;
-    uint32_t data_block_w[4]; uint8_t *data_block = (uint8_t *)data_block_w;
-    uint32_t aes_work_w[4];   uint8_t *aes_work = (uint8_t *)aes_work_w;
-    uint32_t ghash_work_w[4]; uint8_t *ghash_work = (uint8_t *)ghash_work_w;
-    uint32_t ej0_w[4];        uint8_t *ej0 = (uint8_t *)ej0_w; /* Pre-computed E(J₀) = AES(K, IV||0^31||1) */
+    AES_Block_t data_block;
+    AES_Block_t aes_work;
+    AES_Block_t ghash_work = {0};
+    AES_Block_t ej0; /* Pre-computed E(J₀) = AES(K, IV||0^31||1) */
 
     /* Prepare working IV. */
-    AES_Copy12B(iv_block.bytes, Ctx->Iv);
-    set_uint32_be(iv_block.bytes + 12, 1);
+    AES_Copy12B(&iv_block, &Ctx->Iv);
+    Set_Uint32_BE(iv_block.bytes + 12, 1);
 
     /* Pre-compute E(J₀) for final tag XOR — avoids redundant AES_Cipher at end. */
-    AES_BlockCopy(ej0, iv_block.bytes);
-    AES_Cipher((AES_state_t *) ej0, Ctx->RoundKey, Ctx->Mode);
-
-    /* Prepare GHASH calculation. */
-    AES_BlockSetZero(ghash_work);
+    AES_BlockCopy(&ej0, &iv_block);
+    AES_Cipher(&ej0, Ctx->RoundKey, Ctx->Mode);
 
     /* Compute GHASH for any AAD (additional authenticated data). */
     if (AAD) {
         p_data = (uint8_t *) (uintptr_t) AAD;
         data_len = AADLen;
         while (data_len) {
-            memcpy(data_block, p_data, MIN(data_len, AES_BLOCKLEN));
+            memcpy(&data_block, p_data, MIN(data_len, AES_BLOCKLEN));
             if (data_len < AES_BLOCKLEN)
-                memset(data_block + data_len, 0, AES_BLOCKLEN - data_len);
+                memset(data_block.bytes + data_len, 0, AES_BLOCKLEN - data_len);
 
-            AES_BlockXor(ghash_work, data_block, ghash_work);
-            AES_GCM_Mul(ghash_work, (AES_gcm_mul_table_t *) (uintptr_t) Ctx->Table);
+            AES_BlockXor(&ghash_work, &data_block, &ghash_work);
+            AES_GCM_Mul(&ghash_work, Ctx);
             p_data += AES_BLOCKLEN;
             data_len -= MIN(data_len, AES_BLOCKLEN);
         }
@@ -934,22 +901,23 @@ void AES_GCM_Encrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
         while (data_len) {
             uint32_t block_len = MIN(data_len, AES_BLOCKLEN);
             ctr++;
-            set_uint32_be(iv_block.bytes + 12, ctr);
-            AES_BlockCopy(aes_work, iv_block.bytes);
-            AES_Cipher((AES_state_t *) aes_work, Ctx->RoundKey, Ctx->Mode);
+            Set_Uint32_BE(iv_block.bytes + 12, ctr);
+            AES_BlockCopy(&aes_work, &iv_block);
+            AES_Cipher(&aes_work, Ctx->RoundKey, Ctx->Mode);
 
             if (block_len == AES_BLOCKLEN) {
-                AES_BlockXor(p_data, aes_work, data_block);
-                AES_BlockCopy(p_data, data_block);
+                memcpy(&data_block, p_data, AES_BLOCKLEN);
+                AES_BlockXor(&data_block, &aes_work, &data_block);
+                memcpy(p_data, &data_block, AES_BLOCKLEN);
             } else {
-                memcpy(data_block, p_data, block_len);
-                AES_BlockXor(data_block, aes_work, data_block);
-                memset(data_block + block_len, 0, AES_BLOCKLEN - block_len);
-                memcpy(p_data, data_block, block_len);
+                memcpy(&data_block, p_data, block_len);
+                AES_BlockXor(&data_block, &aes_work, &data_block);
+                memset(data_block.bytes + block_len, 0, AES_BLOCKLEN - block_len);
+                memcpy(p_data, &data_block, block_len);
             }
 
-            AES_BlockXor(ghash_work, data_block, ghash_work);
-            AES_GCM_Mul(ghash_work, (AES_gcm_mul_table_t *) (uintptr_t) Ctx->Table);
+            AES_BlockXor(&ghash_work, &data_block, &ghash_work);
+            AES_GCM_Mul(&ghash_work, Ctx);
 
             p_data += block_len;
             data_len -= block_len;
@@ -957,17 +925,16 @@ void AES_GCM_Encrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
     }
     /* Final GHASH calculation.
      * Add block that indicates lengths of AAD and plaintext. */
-    AES_BlockSetZero(ghash_lengths.bytes);
-    set_uint32_be(ghash_lengths.bytes + 4, AADLen * 8u);
-    set_uint32_be(ghash_lengths.bytes + 12, DataLen * 8u);
-    AES_BlockXor(ghash_work, ghash_lengths.bytes, ghash_work);
-    AES_GCM_Mul(ghash_work, (AES_gcm_mul_table_t *) (uintptr_t) Ctx->Table);
+    Set_Uint32_BE(ghash_lengths.bytes + 4, AADLen * 8u);
+    Set_Uint32_BE(ghash_lengths.bytes + 12, DataLen * 8u);
+    AES_BlockXor(&ghash_work, &ghash_lengths, &ghash_work);
+    AES_GCM_Mul(&ghash_work, Ctx);
 
     /* XOR with pre-computed E(J₀). */
-    AES_BlockXor(ghash_work, ej0, ghash_work);
+    AES_BlockXor(&ghash_work, &ej0, &ghash_work);
     /* ghash_work now contains calculated tag. */
     if (Tag)
-        memcpy(Tag, ghash_work, MIN(TagLen, AES_BLOCKLEN));
+        memcpy(Tag, &ghash_work, MIN(TagLen, AES_BLOCKLEN));
 }
 
 /**
@@ -986,25 +953,22 @@ void AES_GCM_Encrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
  * @retval  True if tag verified, otherwise false.
  */
 bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const uint8_t *AAD, uint32_t AADLen, const uint8_t *Tag, uint8_t TagLen) {
-    AES_96b_iv_t iv_block;
-    AES_gcm_lenhash_t ghash_lengths;
+    AES_Block_t iv_block;
+    AES_Block_t ghash_lengths = {0};
     uint8_t *p_data;
     uint32_t data_len;
-    uint32_t data_block_w[4]; uint8_t *data_block = (uint8_t *)data_block_w;
-    uint32_t aes_work_w[4];   uint8_t *aes_work = (uint8_t *)aes_work_w;
-    uint32_t ghash_work_w[4]; uint8_t *ghash_work = (uint8_t *)ghash_work_w;
-    uint32_t ej0_w[4];        uint8_t *ej0 = (uint8_t *)ej0_w; /* Pre-computed E(J₀) = AES(K, IV||0^31||1) */
+    AES_Block_t data_block;
+    AES_Block_t aes_work;
+    AES_Block_t ghash_work = {0};
+    AES_Block_t ej0; /* Pre-computed E(J₀) = AES(K, IV||0^31||1) */
 
     /* Prepare working IV. */
-    AES_Copy12B(iv_block.bytes, Ctx->Iv);
-    set_uint32_be(iv_block.bytes + 12, 1);
+    AES_Copy12B(&iv_block, &Ctx->Iv);
+    Set_Uint32_BE(iv_block.bytes + 12, 1);
 
     /* Pre-compute E(J₀) for final tag XOR. */
-    AES_BlockCopy(ej0, iv_block.bytes);
-    AES_Cipher((AES_state_t *) ej0, Ctx->RoundKey, Ctx->Mode);
-
-    /* Prepare GHASH calculation. */
-    AES_BlockSetZero(ghash_work);
+    AES_BlockCopy(&ej0, &iv_block);
+    AES_Cipher(&ej0, Ctx->RoundKey, Ctx->Mode);
 
     /* Compute GHASH for any AAD (additional authenticated data). */
     if (AAD) {
@@ -1013,14 +977,14 @@ bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
         while (data_len) {
             uint32_t block_len = MIN(data_len, AES_BLOCKLEN);
             if (block_len == AES_BLOCKLEN) {
-                AES_BlockCopy(data_block, p_data);
+                memcpy(&data_block, p_data, AES_BLOCKLEN);
             } else {
-                memcpy(data_block, p_data, block_len);
-                memset(data_block + block_len, 0, AES_BLOCKLEN - block_len);
+                memcpy(&data_block, p_data, block_len);
+                memset(data_block.bytes + block_len, 0, AES_BLOCKLEN - block_len);
             }
 
-            AES_BlockXor(ghash_work, data_block, ghash_work);
-            AES_GCM_Mul(ghash_work, (AES_gcm_mul_table_t *) (uintptr_t) Ctx->Table);
+            AES_BlockXor(&ghash_work, &data_block, &ghash_work);
+            AES_GCM_Mul(&ghash_work, Ctx);
             p_data += block_len;
             data_len -= block_len;
         }
@@ -1033,32 +997,31 @@ bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
         while (data_len) {
             uint32_t block_len = MIN(data_len, AES_BLOCKLEN);
             if (block_len == AES_BLOCKLEN) {
-                AES_BlockCopy(data_block, p_data);
+                memcpy(&data_block, p_data, AES_BLOCKLEN);
             } else {
-                memcpy(data_block, p_data, block_len);
-                memset(data_block + block_len, 0, AES_BLOCKLEN - block_len);
+                memcpy(&data_block, p_data, block_len);
+                memset(data_block.bytes + block_len, 0, AES_BLOCKLEN - block_len);
             }
 
-            AES_BlockXor(ghash_work, data_block, ghash_work);
-            AES_GCM_Mul(ghash_work, (AES_gcm_mul_table_t *) (uintptr_t) Ctx->Table);
+            AES_BlockXor(&ghash_work, &data_block, &ghash_work);
+            AES_GCM_Mul(&ghash_work, Ctx);
             p_data += block_len;
             data_len -= block_len;
         }
     }
     /* Final GHASH calculation.
      * Add block that indicates lengths of AAD and plaintext. */
-    AES_BlockSetZero(ghash_lengths.bytes);
-    set_uint32_be(ghash_lengths.bytes + 4, AADLen * 8u);
-    set_uint32_be(ghash_lengths.bytes + 12, DataLen * 8u);
-    AES_BlockXor(ghash_work, ghash_lengths.bytes, ghash_work);
-    AES_GCM_Mul(ghash_work, (AES_gcm_mul_table_t *) (uintptr_t) Ctx->Table);
+    Set_Uint32_BE(ghash_lengths.bytes + 4, AADLen * 8u);
+    Set_Uint32_BE(ghash_lengths.bytes + 12, DataLen * 8u);
+    AES_BlockXor(&ghash_work, &ghash_lengths, &ghash_work);
+    AES_GCM_Mul(&ghash_work, Ctx);
 
     /* XOR with pre-computed E(J₀). */
-    AES_BlockXor(ghash_work, ej0, ghash_work);
+    AES_BlockXor(&ghash_work, &ej0, &ghash_work);
     /* ghash_work now contains calculated tag. */
 
     /* Verify GHASH */
-    if (memcmp(ghash_work, Tag, TagLen) != 0)
+    if (memcmp(ghash_work.bytes, Tag, TagLen) != 0)
         return false;
 
     /* Decrypt any ciphertext. */
@@ -1069,17 +1032,15 @@ bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
         while (data_len) {
             uint32_t block_len = MIN(data_len, AES_BLOCKLEN);
             ctr++;
-            set_uint32_be(iv_block.bytes + 12, ctr);
-            AES_BlockCopy(aes_work, iv_block.bytes);
-            AES_Cipher((AES_state_t *) aes_work, Ctx->RoundKey, Ctx->Mode);
+            Set_Uint32_BE(iv_block.bytes + 12, ctr);
+            AES_BlockCopy(&aes_work, &iv_block);
+            AES_Cipher(&aes_work, Ctx->RoundKey, Ctx->Mode);
 
-            if (block_len == AES_BLOCKLEN) {
-                AES_BlockXor(p_data, aes_work, p_data);
-            } else {
-                memcpy(data_block, p_data, block_len);
-                AES_BlockXor(data_block, aes_work, data_block);
-                memcpy(p_data, data_block, block_len);
-            }
+            memcpy(&data_block, p_data, block_len);
+            if (block_len < AES_BLOCKLEN)
+                memset(data_block.bytes + block_len, 0, AES_BLOCKLEN - block_len);
+            AES_BlockXor(&data_block, &aes_work, &data_block);
+            memcpy(p_data, &data_block, block_len);
 
             p_data += block_len;
             data_len -= block_len;
@@ -1090,35 +1051,35 @@ bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
 }
 
 /**
- * @fn	static void AES_GCM_TableInit(AES_gcm_mul_table_t* Table, const uint8_t Key[AES_BLOCKLEN])
+ * @fn	static void AES_GCM_TableInit(AES_GCM_Ctx_t* Ctx, const AES_Block_t Key)
  *
  * @brief	Given a key, pre-calculate the medium-sized table that is needed for
  *          AES_GCM_Mul(), the 4-bit table-driven implementation of GCM multiplication.
  *
- * @param   Table GCM Table.
+ * @param   Ctx AES-GCM context.
+
  * @param   Key 	AES key.
  */
-static void AES_GCM_TableInit(AES_gcm_mul_table_t *Table, const uint8_t Key[AES_BLOCKLEN]) {
-    AES_gcm_t a;
-    AES_gcm_t block;
+static void AES_GCM_TableInit(AES_GCM_Ctx_t *Ctx, const AES_Block_t *Key) {
+    AES_Block_t a;
     uint_fast8_t i_bit = 0x80u;
     uint_fast8_t j;
 
-    memset(Table, 0u, sizeof(*Table));
-    AES_GCM_ByteToStruct(&a, Key);
-    AES_BlockCopy(block.bytes, Key);
+    memset(Ctx->KeyDataHi, 0u, sizeof(Ctx->KeyDataHi));
+    memset(Ctx->KeyDataLo, 0u, sizeof(Ctx->KeyDataLo));
+    AES_BlockCopy(&a, Key);
 
     for (;;) {
         if (i_bit >= 0x10u) {
             for (j = 15u; j != 0u; j--) {
                 if (j & (i_bit >> 4u)) {
-                    AES_BlockXor(Table->keyDataHi[j - 1u].bytes, block.bytes, Table->keyDataHi[j - 1u].bytes);
+                    AES_BlockXor(&Ctx->KeyDataHi[j - 1u], &a, &Ctx->KeyDataHi[j - 1u]);
                 }
             }
         } else {
             for (j = 15u; j != 0u; j--) {
                 if (j & i_bit) {
-                    AES_BlockXor(Table->keyDataLo[j - 1u].bytes, block.bytes, Table->keyDataLo[j - 1u].bytes);
+                    AES_BlockXor(&Ctx->KeyDataLo[j - 1u], &a, &Ctx->KeyDataLo[j - 1u]);
                 }
             }
         }
@@ -1127,22 +1088,21 @@ static void AES_GCM_TableInit(AES_gcm_mul_table_t *Table, const uint8_t Key[AES_
         if (i_bit == 0u)
             break;
         AES_GCM_GFMul2(&a);
-        AES_GCM_StructToByte(block.bytes, &a);
     }
 }
 
 /**
- * @fn	static void AES_GCM_Mul(uint8_t Block[AES_BLOCKLEN], const AES_gcm_mul_table_t* Table)
+ * @fn	static void AES_GCM_Mul(uint8_t Block[AES_BLOCKLEN], const AES_GCM_Ctx_t* Ctx)
  *
  * @brief	Galois 128-bit multiply.
  *
- * @param   Block AES key.
- * @param   Table GCM Table.
+ * @param   Block AES block.
+ * @param   Ctx AES-GCM context.
  */
-static void AES_GCM_Mul(uint8_t Block[AES_BLOCKLEN], const AES_gcm_mul_table_t *Table) {
+static void AES_GCM_Mul(AES_Block_t *Block, const AES_GCM_Ctx_t *Ctx) {
     uint8_t block_byte;
     uint8_t block_nibble;
-    AES_gcm_t result = {{0}};
+    AES_Block_t result = {0};
     uint_fast8_t i = AES_BLOCKLEN - 1u;
 
     /* Skip initial AES_GCM_GFMul256(&result) which is unnecessary when
@@ -1152,19 +1112,19 @@ static void AES_GCM_Mul(uint8_t Block[AES_BLOCKLEN], const AES_gcm_mul_table_t *
     while (1) {
         AES_GCM_GFMul256(&result);
     start:
-        block_byte = Block[i];
+        block_byte = Block->bytes[i];
         /* High nibble */
         block_nibble = (block_byte >> 4u) & 0xFu;
         if (block_nibble) {
             for (int j = 0; j < 4; j++) {
-                result.element[j] ^= Table->keyDataHi[block_nibble - 1u].element[j];
+                result.words[j] ^= Ctx->KeyDataHi[block_nibble - 1u].words[j];
             }
         }
         /* Low nibble */
         block_nibble = block_byte & 0xFu;
         if (block_nibble) {
             for (int j = 0; j < 4; j++) {
-                result.element[j] ^= Table->keyDataLo[block_nibble - 1u].element[j];
+                result.words[j] ^= Ctx->KeyDataLo[block_nibble - 1u].words[j];
             }
         }
         if (i == 0u) {
@@ -1172,103 +1132,54 @@ static void AES_GCM_Mul(uint8_t Block[AES_BLOCKLEN], const AES_gcm_mul_table_t *
         }
         i--;
     }
-    AES_BlockCopy(Block, result.bytes);
+    AES_BlockCopy(Block, &result);
 }
 
 /**
- * @fn	static void AES_GCM_ByteToStruct(AES_gcm_t* Dst, const uint8_t Src[AES_BLOCKLEN])
+ * @fn	static void AES_GCM_GFMul2(AES_Block_t* p)
  *
- * @brief	Convert a multiplicand for GCM Galois 128-bit multiply into a form that can
- * b        e more efficiently manipulated for bit-by-bit calculation of the multiply.
- *
- * @param   Dst Destination struct.
- * @param   Src Data block.
- */
-static void AES_GCM_ByteToStruct(AES_gcm_t *Dst, const uint8_t Src[AES_BLOCKLEN]) {
-    uint_fast8_t i;
-    uint_fast8_t j;
-    const uint8_t *p_src_tmp;
-    uint32_t temp;
-
-    p_src_tmp = Src;
-    for (i = 0; i < 4; i++) {
-        temp = 0;
-        for (j = 0; j < 4; j++) {
-            temp = (temp << 8) | *p_src_tmp++;
-        }
-        Dst->element[i] = temp;
-    }
-}
-
-/**
- * @fn	static void AES_GCM_StructToByte(uint8_t Dst[AES_BLOCKLEN], const AES_gcm_t* Src)
- *
- * @brief	Convert the GCM Galois 128-bit multiply special form back into an ordinary array of bytes.
- *
- * @param   Dst Destination data block.
- * @param   Src Source struct.
- */
-static void AES_GCM_StructToByte(uint8_t Dst[AES_BLOCKLEN], const AES_gcm_t *Src) {
-    uint_fast8_t i;
-    uint_fast8_t j;
-    uint8_t *p_dst_tmp;
-    uint32_t temp;
-
-    p_dst_tmp = Dst;
-    for (i = 0; i < 4; i++) {
-        temp = Src->element[i];
-        for (j = 0; j < 4; j++) {
-            *p_dst_tmp++ = (temp >> (32 - 8u));
-            temp <<= 8;
-        }
-    }
-}
-
-/**
- * @fn	static void AES_GCM_GFMul2(AES_gcm_t* p)
- *
- * @brief	Galois 128-bit multiply by 2.
+ * @brief	Galois 128-bit multiply by 2, operating directly on native little-endian
+ *          word order. Each byte is right-shifted by 1, with the LSB of byte k
+ *          carrying to the MSB of byte k+1. This avoids byte-swap conversions.
  *
  * @param   Data Data struct.
  */
-static void AES_GCM_GFMul2(AES_gcm_t *Data) {
+static void AES_GCM_GFMul2(AES_Block_t *Data) {
     uint_fast8_t i = 0;
     uint32_t carry;
     uint32_t next_carry;
 
     /*
-     * This expression is intended to be timing invariant to prevent a timing
-     * attack due to execution timing dependent on the bits of the GHASH key.
-     * Check generated assembler from the compiler to confirm it.
-     * This could be expressed as an 'if' statement, but then it's less likely
-     * to be timing invariant.
-     *
-     * (0xE1u << (32 - 8u)) is the reduction poly bits.
-     * (p->element[4 - 1u] & 1u) is the check of the MSbit
-     * to determine if it's necessary to XOR the reduction poly.
-     * (-(p->element[4 - 1u] & 1u)) turns it into a mask for
-     * the bitwise AND.
+     * Timing-invariant reduction check.
+     * x^127 is at byte[15] bit 0 = bit 24 of words[3] on little-endian.
+     * 0xE1 is the reduction polynomial {x^7 + x^2 + x + 1} in MSB-first
+     * byte convention, XOR'd into byte 0 (low byte of words[0] on LE).
      */
-    carry = ((uint32_t) 0xE1u << (32 - 8u)) & (-(int32_t) (Data->element[4 - 1u] & 1u));
+    carry = 0xE1u & (uint32_t)(-(int32_t)((Data->words[4 - 1u] >> 24) & 1u));
 
     goto start;
     for (; i < 4 - 1u; i++) {
         carry = next_carry;
-    start:
-        next_carry = ((Data->element[i] & 1u) << (32 - 1u));
-        Data->element[i] = (Data->element[i] >> 1u) ^ carry;
+    start:;
+        uint32_t w = Data->words[i];
+        /* Inter-word carry: byte 3 LSB (bit 24) → byte 0 MSB (bit 7) of next word */
+        next_carry = (w >> 17) & 0x80u;
+        /* Right-shift each byte by 1, then propagate LSBs of bytes 0,1,2
+         * to MSBs of bytes 1,2,3 within the same word */
+        Data->words[i] = ((w >> 1) & 0x7F7F7F7Fu) ^ ((w & 0x00010101u) << 15) ^ carry;
     }
-    Data->element[i] = (Data->element[i] >> 1u) ^ next_carry;
+    uint32_t w = Data->words[i];
+    Data->words[i] = ((w >> 1) & 0x7F7F7F7Fu) ^ ((w & 0x00010101u) << 15) ^ next_carry;
 }
 
 /**
- * @fn	static void AES_GCM_GFMul256(AES_gcm_t* p)
+ * @fn	static void AES_GCM_GFMul256(AES_Block_t* p)
  *
  * @brief	Galois 128-bit multiply by 2^8.
  *
  * @param   Data Data struct.
  */
-static void AES_GCM_GFMul256(AES_gcm_t *p) {
+static void AES_GCM_GFMul256(AES_Block_t *p) {
     uint_fast8_t i = 0;
     uint32_t carry;
     uint32_t next_carry;
@@ -1279,8 +1190,8 @@ static void AES_GCM_GFMul256(AES_gcm_t *p) {
     for (; i < 4 - 1u; i++) {
         carry = next_carry;
     start:
-        next_carry = p->element[i] >> (32 - 8u);
-        p->element[i] = (p->element[i] << 8u) ^ carry;
+        next_carry = p->words[i] >> (32 - 8u);
+        p->words[i] = (p->words[i] << 8u) ^ carry;
     }
-    p->element[i] = (p->element[i] << 8u) ^ next_carry;
+    p->words[i] = (p->words[i] << 8u) ^ next_carry;
 }
