@@ -1,5 +1,6 @@
 from setuptools import setup, Extension
 import os
+import sys
 
 # Read the long description from README.md
 with open("README.md", "r", encoding="utf-8") as fh:
@@ -9,6 +10,7 @@ uaes_module = Extension(
     'uaes',
     sources=['uaes.c', 'crypt_lib.c'],
     include_dirs=['.'],
+    extra_compile_args=['-fno-strict-aliasing'] if sys.platform != 'win32' else [],
 )
 
 setup(
