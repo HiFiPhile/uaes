@@ -1,8 +1,13 @@
 import os
 import uaes
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import cmac
-from cryptography.hazmat.backends import default_backend
+
+try:
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from cryptography.hazmat.primitives import cmac
+    from cryptography.hazmat.backends import default_backend
+    HAS_CRYPTOGRAPHY = True
+except ImportError:
+    HAS_CRYPTOGRAPHY = False
 
 # ==============================================================================
 # HARDCODED NIST TEST VECTORS (Known Answer Tests)
@@ -132,6 +137,9 @@ def generate_random_vector(key_len, mode, pt_len=64, aad_len=32):
     }
 
 def generate_random_vectors():
+    if not HAS_CRYPTOGRAPHY:
+        return []
+
     rnd_vectors = []
     for key_len in [128, 192, 256]:
         for mode in ["ECB", "CBC", "CTR", "GCM", "CMAC"]:
@@ -161,19 +169,19 @@ def run_tests():
                 for i in range(0, len(v['pt']), 16):
                     ct += ctx.encrypt(v['pt'][i:i+16])
                 assert ct == v['ct'], f"CT mismatch. Expected {v['ct'].hex()}, got {ct.hex()}"
-                
+
                 pt = b''
                 for i in range(0, len(v['ct']), 16):
                     pt += ctx.decrypt(v['ct'][i:i+16])
                 assert pt == v['pt'], "PT mismatch"
-                
+
             elif v['mode'] == 'CBC':
                 ctx = uaes.AES_CBC(key=v['key'], iv=v['iv'])
                 ct = b''
                 for i in range(0, len(v['pt']), 16):
                     ct += ctx.encrypt(v['pt'][i:i+16])
                 assert ct == v['ct'], f"CT mismatch. Expected {v['ct'].hex()}, got {ct.hex()}"
-                
+
                 ctx = uaes.AES_CBC(key=v['key'], iv=v['iv'])
                 pt = b''
                 for i in range(0, len(v['ct']), 16):
@@ -187,12 +195,12 @@ def run_tests():
                 for i in range(0, len(v['pt']), 16):
                     ct_set_iv += ctx_set_iv.encrypt(v['pt'][i:i+16])
                 assert ct_set_iv == v['ct'], "set_iv CT mismatch"
-                
+
             elif v['mode'] == 'CTR':
                 ctx = uaes.AES_CTR(key=v['key'], iv=v['iv'])
                 ct = ctx.crypt(v['pt'])
                 assert ct == v['ct'], f"CT mismatch. Expected {v['ct'].hex()}, got {ct.hex()}"
-                
+
                 ctx = uaes.AES_CTR(key=v['key'], iv=v['iv'])
                 pt = ctx.crypt(v['ct'])
                 assert pt == v['pt'], "PT mismatch"
@@ -208,13 +216,13 @@ def run_tests():
                 ctx_set_ctr.set_iv(iv=v['iv'], ctr=ctr_val)
                 ct_set_ctr = ctx_set_ctr.crypt(v['pt'])
                 assert ct_set_ctr == v['ct'], "set_ctr CT mismatch"
-                
+
             elif v['mode'] == 'GCM':
                 ctx = uaes.AES_GCM(key=v['key'], iv=v['iv'])
                 ct, tag = ctx.encrypt(data=v['pt'], aad=v['aad'] if v['aad'] else None, tag_len=len(v['tag']))
                 assert ct == v['ct'], f"CT mismatch. Expected {v['ct'].hex()}, got {ct.hex()}"
                 assert tag == v['tag'], f"Tag mismatch. Expected {v['tag'].hex()}, got {tag.hex()}"
-                
+
                 ctx = uaes.AES_GCM(key=v['key'], iv=v['iv'])
                 pt = ctx.decrypt(data=v['ct'], tag=v['tag'], aad=v['aad'] if v['aad'] else None)
                 assert pt == v['pt'], "PT mismatch"
@@ -224,12 +232,12 @@ def run_tests():
                 ctx_set_iv.set_iv(v['iv'])
                 ct_set_iv, tag_set_iv = ctx_set_iv.encrypt(data=v['pt'], aad=v['aad'] if v['aad'] else None, tag_len=len(v['tag']))
                 assert ct_set_iv == v['ct'] and tag_set_iv == v['tag'], "set_iv CT/Tag mismatch"
-                
+
             elif v['mode'] == 'CMAC':
                 ctx = uaes.AES_CMAC(key=v['key'])
                 tag = ctx.cmac(data=v['pt'], mac_len=len(v['tag']))
                 assert tag == v['tag'], f"Tag mismatch. Expected {v['tag'].hex()}, got {tag.hex()}"
-                
+
             print(f"[PASS] {name}")
             passed += 1
         except Exception as e:
