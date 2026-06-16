@@ -1,0 +1,15 @@
+LICENSE
+MANIFEST.in
+README.md
+crypt_lib.c
+crypt_lib.h
+pyproject.toml
+setup.py
+uaes.c
+tests/benchmark.py
+tests/test_uaes.py
+uaes-stubs/__init__.pyi
+uaes.egg-info/PKG-INFO
+uaes.egg-info/SOURCES.txt
+uaes.egg-info/dependency_links.txt
+uaes.egg-info/top_level.txt
