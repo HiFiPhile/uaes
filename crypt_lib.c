@@ -60,25 +60,18 @@ typedef union {
     uint8_t bytes[AES_BLOCKLEN];
 } AES_gcm_lenhash_t;
 
-/* Inline helpers for 32-bit operations on ARM */
+/* Inline helpers — use memcpy to avoid strict-aliasing UB; compilers optimize
+   fixed-size memcpy to the same register-width moves as manual casts. */
 static inline void AES_BlockCopy(void *dst, const void *src) {
-    ((uint32_t *)dst)[0] = ((const uint32_t *)src)[0];
-    ((uint32_t *)dst)[1] = ((const uint32_t *)src)[1];
-    ((uint32_t *)dst)[2] = ((const uint32_t *)src)[2];
-    ((uint32_t *)dst)[3] = ((const uint32_t *)src)[3];
+    memcpy(dst, src, AES_BLOCKLEN);
 }
 
 static inline void AES_BlockSetZero(void *dst) {
-    ((uint32_t *)dst)[0] = 0;
-    ((uint32_t *)dst)[1] = 0;
-    ((uint32_t *)dst)[2] = 0;
-    ((uint32_t *)dst)[3] = 0;
+    memset(dst, 0, AES_BLOCKLEN);
 }
 
 static inline void AES_Copy12B(void *dst, const void *src) {
-    ((uint32_t *)dst)[0] = ((const uint32_t *)src)[0];
-    ((uint32_t *)dst)[1] = ((const uint32_t *)src)[1];
-    ((uint32_t *)dst)[2] = ((const uint32_t *)src)[2];
+    memcpy(dst, src, 12);
 }
 
 /* Private define ------------------------------------------------------------*/
@@ -545,13 +538,14 @@ static void AES_KeyExpansion(uint8_t *RoundKey, const uint8_t *Key, AES_Mode_t M
  * @param [in,out]	RoundKey	If non-null, the round key.
  */
 static void AES_AddRoundKey(uint8_t round, AES_state_t *state, const uint8_t *RoundKey) {
-    /* Direct 32-bit XOR per column — avoids memcpy overhead on ARM */
-    const uint32_t *rk = (const uint32_t *)&RoundKey[round * AES_Nb * 4];
-    uint32_t *st = (uint32_t *)(*state);
+    uint32_t st[4], rk[4];
+    memcpy(st, *state, AES_BLOCKLEN);
+    memcpy(rk, &RoundKey[round * AES_Nb * 4], AES_BLOCKLEN);
     st[0] ^= rk[0];
     st[1] ^= rk[1];
     st[2] ^= rk[2];
     st[3] ^= rk[3];
+    memcpy(*state, st, AES_BLOCKLEN);
 }
 
 static uint8_t AES_xtime(uint8_t x) {
@@ -739,11 +733,14 @@ static void AES_InvMixColumns(AES_state_t *state) {
  *
  */
 static void AES_BlockXor(const uint8_t *in1, const uint8_t *in2, uint8_t *out) {
-    /* Direct 32-bit word XOR — all AES blocks are 4-byte aligned */
-    ((uint32_t *)out)[0] = ((const uint32_t *)in1)[0] ^ ((const uint32_t *)in2)[0];
-    ((uint32_t *)out)[1] = ((const uint32_t *)in1)[1] ^ ((const uint32_t *)in2)[1];
-    ((uint32_t *)out)[2] = ((const uint32_t *)in1)[2] ^ ((const uint32_t *)in2)[2];
-    ((uint32_t *)out)[3] = ((const uint32_t *)in1)[3] ^ ((const uint32_t *)in2)[3];
+    uint32_t a[4], b[4];
+    memcpy(a, in1, AES_BLOCKLEN);
+    memcpy(b, in2, AES_BLOCKLEN);
+    a[0] ^= b[0];
+    a[1] ^= b[1];
+    a[2] ^= b[2];
+    a[3] ^= b[3];
+    memcpy(out, a, AES_BLOCKLEN);
 }
 
 /**
