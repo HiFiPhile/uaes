@@ -226,17 +226,17 @@ static int AES_CTR_init(AES_CTRObject *self, PyObject *args, PyObject *kwds) {
     static char *kwlist[] = {"key", "iv", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "y#|y#", kwlist, &key, &key_len, &iv, &iv_len)) return -1;
     if (!get_mode_from_keylen(key_len, &mode)) return -1;
-    
+
     AES_Init_Ctx(&self->ctx, (const uint8_t*)key, mode);
-    
+
     uint8_t iv_bytes[16] = {0};
     if (iv) {
         if (iv_len != 16) { PyErr_SetString(PyExc_ValueError, "IV must be 16 bytes"); return -1; }
         memcpy(iv_bytes, iv, 16);
     }
-    uint32_t ctr_val = ((uint32_t)iv_bytes[12] << 24) | 
-                       ((uint32_t)iv_bytes[13] << 16) | 
-                       ((uint32_t)iv_bytes[14] << 8) | 
+    uint32_t ctr_val = ((uint32_t)iv_bytes[12] << 24) |
+                       ((uint32_t)iv_bytes[13] << 16) |
+                       ((uint32_t)iv_bytes[14] << 8) |
                        (uint32_t)iv_bytes[15];
     AES_CTR_Ctx_Set_Iv(&self->ctx, iv_bytes, ctr_val);
     return 0;
@@ -253,12 +253,12 @@ static PyObject* AES_CTR_set_iv(AES_CTRObject *self, PyObject *args, PyObject *k
         if (iv_len != 16) { PyErr_SetString(PyExc_ValueError, "IV must be 16 bytes"); return NULL; }
         memcpy(iv_bytes, iv, 16);
     }
-    
+
     uint32_t ctr_val = ctr;
     if (!ctr && iv) {
-        ctr_val = ((uint32_t)iv_bytes[12] << 24) | 
-                  ((uint32_t)iv_bytes[13] << 16) | 
-                  ((uint32_t)iv_bytes[14] << 8) | 
+        ctr_val = ((uint32_t)iv_bytes[12] << 24) |
+                  ((uint32_t)iv_bytes[13] << 16) |
+                  ((uint32_t)iv_bytes[14] << 8) |
                   (uint32_t)iv_bytes[15];
     }
     AES_CTR_Ctx_Set_Iv(&self->ctx, iv_bytes, ctr_val);
@@ -317,7 +317,7 @@ static int AES_GCM_init(AES_GCMObject *self, PyObject *args, PyObject *kwds) {
     static char *kwlist[] = {"key", "iv", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "y#|y#", kwlist, &key, &key_len, &iv, &iv_len)) return -1;
     if (!get_mode_from_keylen(key_len, &mode)) return -1;
-    
+
     uint8_t iv_bytes[12] = {0};
     if (iv) {
         if (iv_len != 12) { PyErr_SetString(PyExc_ValueError, "GCM IV must be 12 bytes"); return -1; }
@@ -342,15 +342,15 @@ static PyObject* AES_GCM_encrypt(AES_GCMObject *self, PyObject *args, PyObject *
     int tag_len = 16;
     static char *kwlist[] = {"data", "aad", "tag_len", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "y#|y#i", kwlist, &data, &data_len, &aad, &aad_len, &tag_len)) return NULL;
-    
+
     PyObject *out = PyBytes_FromStringAndSize(data, data_len);
     PyObject *tag = PyBytes_FromStringAndSize(NULL, tag_len);
     if (!out || !tag) { Py_XDECREF(out); Py_XDECREF(tag); return NULL; }
-    
-    AES_GCM_Encrypt(&self->ctx, (uint32_t*)PyBytes_AS_STRING(out), (uint32_t)data_len, 
-                          (const uint8_t*)aad, (uint32_t)aad_len, 
+
+    AES_GCM_Encrypt(&self->ctx, (uint32_t*)PyBytes_AS_STRING(out), (uint32_t)data_len,
+                          (const uint8_t*)aad, (uint32_t)aad_len,
                           (uint8_t*)PyBytes_AS_STRING(tag), (uint8_t)tag_len);
-                          
+
     PyObject *res = PyTuple_Pack(2, out, tag);
     Py_DECREF(out); Py_DECREF(tag);
     return res;
@@ -361,12 +361,12 @@ static PyObject* AES_GCM_decrypt(AES_GCMObject *self, PyObject *args, PyObject *
     Py_ssize_t data_len, aad_len = 0, tag_len;
     static char *kwlist[] = {"data", "tag", "aad", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "y#y#|y#", kwlist, &data, &data_len, &tag, &tag_len, &aad, &aad_len)) return NULL;
-    
+
     PyObject *out = PyBytes_FromStringAndSize(data, data_len);
     if (!out) return NULL;
-    
-    bool ok = AES_GCM_Decrypt(&self->ctx, (uint32_t*)PyBytes_AS_STRING(out), (uint32_t)data_len, 
-                                    (const uint8_t*)aad, (uint32_t)aad_len, 
+
+    bool ok = AES_GCM_Decrypt(&self->ctx, (uint32_t*)PyBytes_AS_STRING(out), (uint32_t)data_len,
+                                    (const uint8_t*)aad, (uint32_t)aad_len,
                                     (const uint8_t*)tag, (uint8_t)tag_len);
     if (!ok) {
         Py_DECREF(out);
@@ -458,10 +458,10 @@ static PyObject* AES_CMAC_cmac(AES_CMACObject *self, PyObject *args, PyObject *k
     int mac_len = 16;
     static char *kwlist[] = {"data", "mac_len", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "y#|i", kwlist, &data, &data_len, &mac_len)) return NULL;
-    
+
     PyObject *out = PyBytes_FromStringAndSize(NULL, mac_len);
     if (!out) return NULL;
-    
+
     AES_CMAC(&self->ctx, (const uint32_t*)data, (uint32_t)data_len, (uint8_t*)PyBytes_AS_STRING(out), (uint_fast8_t)mac_len);
     return out;
 }
@@ -495,30 +495,30 @@ static PyModuleDef uaesmodule = {
 
 PyMODINIT_FUNC PyInit_uaes(void) {
     PyObject *m;
-    
+
     if (PyType_Ready(&AES_ECBType) < 0) return NULL;
     if (PyType_Ready(&AES_CBCType) < 0) return NULL;
     if (PyType_Ready(&AES_CTRType) < 0) return NULL;
     if (PyType_Ready(&AES_GCMType) < 0) return NULL;
     if (PyType_Ready(&AES_CMACType) < 0) return NULL;
-    
+
     m = PyModule_Create(&uaesmodule);
     if (m == NULL) return NULL;
-    
+
     Py_INCREF(&AES_ECBType);
     if (PyModule_AddObject(m, "AES_ECB", (PyObject *) &AES_ECBType) < 0) { Py_DECREF(&AES_ECBType); Py_DECREF(m); return NULL; }
-    
+
     Py_INCREF(&AES_CBCType);
     if (PyModule_AddObject(m, "AES_CBC", (PyObject *) &AES_CBCType) < 0) { Py_DECREF(&AES_CBCType); Py_DECREF(m); return NULL; }
-    
+
     Py_INCREF(&AES_CTRType);
     if (PyModule_AddObject(m, "AES_CTR", (PyObject *) &AES_CTRType) < 0) { Py_DECREF(&AES_CTRType); Py_DECREF(m); return NULL; }
-    
+
     Py_INCREF(&AES_GCMType);
     if (PyModule_AddObject(m, "AES_GCM", (PyObject *) &AES_GCMType) < 0) { Py_DECREF(&AES_GCMType); Py_DECREF(m); return NULL; }
-    
+
     Py_INCREF(&AES_CMACType);
     if (PyModule_AddObject(m, "AES_CMAC", (PyObject *) &AES_CMACType) < 0) { Py_DECREF(&AES_CMACType); Py_DECREF(m); return NULL; }
-    
+
     return m;
 }
