@@ -39,7 +39,7 @@ static PyObject* AES_ECB_encrypt(AES_ECBObject *self, PyObject *args) {
     }
     PyObject *out = PyBytes_FromStringAndSize(data, data_len);
     if (!out) return NULL;
-    AES_ECB_Encrypt(&self->ctx, (uint8_t*)PyBytes_AS_STRING(out), (uint32_t)data_len);
+    AES_ECB_Encrypt(&self->ctx, (uint32_t*)PyBytes_AS_STRING(out), (uint32_t)data_len);
     return out;
 }
 
@@ -53,7 +53,7 @@ static PyObject* AES_ECB_decrypt(AES_ECBObject *self, PyObject *args) {
     }
     PyObject *out = PyBytes_FromStringAndSize(data, data_len);
     if (!out) return NULL;
-    AES_ECB_Decrypt(&self->ctx, (uint8_t*)PyBytes_AS_STRING(out), (uint32_t)data_len);
+    AES_ECB_Decrypt(&self->ctx, (uint32_t*)PyBytes_AS_STRING(out), (uint32_t)data_len);
     return out;
 }
 
@@ -65,7 +65,7 @@ static PyObject* AES_ECB_encrypt_into(AES_ECBObject *self, PyObject *args) {
         PyErr_SetString(PyExc_ValueError, "Data length must be a multiple of 16 bytes");
         return NULL;
     }
-    AES_ECB_Encrypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len);
+    AES_ECB_Encrypt(&self->ctx, (uint32_t*)buf.buf, (uint32_t)buf.len);
     PyBuffer_Release(&buf);
     Py_RETURN_NONE;
 }
@@ -78,7 +78,7 @@ static PyObject* AES_ECB_decrypt_into(AES_ECBObject *self, PyObject *args) {
         PyErr_SetString(PyExc_ValueError, "Data length must be a multiple of 16 bytes");
         return NULL;
     }
-    AES_ECB_Decrypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len);
+    AES_ECB_Decrypt(&self->ctx, (uint32_t*)buf.buf, (uint32_t)buf.len);
     PyBuffer_Release(&buf);
     Py_RETURN_NONE;
 }
@@ -146,7 +146,7 @@ static PyObject* AES_CBC_encrypt(AES_CBCObject *self, PyObject *args) {
     }
     PyObject *out = PyBytes_FromStringAndSize(data, data_len);
     if (!out) return NULL;
-    AES_CBC_Encrypt(&self->ctx, (uint8_t*)PyBytes_AS_STRING(out), (uint32_t)data_len);
+    AES_CBC_Encrypt(&self->ctx, (uint32_t*)PyBytes_AS_STRING(out), (uint32_t)data_len);
     return out;
 }
 
@@ -160,7 +160,7 @@ static PyObject* AES_CBC_decrypt(AES_CBCObject *self, PyObject *args) {
     }
     PyObject *out = PyBytes_FromStringAndSize(data, data_len);
     if (!out) return NULL;
-    AES_CBC_Decrypt(&self->ctx, (uint8_t*)PyBytes_AS_STRING(out), (uint32_t)data_len);
+    AES_CBC_Decrypt(&self->ctx, (uint32_t*)PyBytes_AS_STRING(out), (uint32_t)data_len);
     return out;
 }
 
@@ -172,7 +172,7 @@ static PyObject* AES_CBC_encrypt_into(AES_CBCObject *self, PyObject *args) {
         PyErr_SetString(PyExc_ValueError, "Data length must be a multiple of 16 bytes");
         return NULL;
     }
-    AES_CBC_Encrypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len);
+    AES_CBC_Encrypt(&self->ctx, (uint32_t*)buf.buf, (uint32_t)buf.len);
     PyBuffer_Release(&buf);
     Py_RETURN_NONE;
 }
@@ -185,7 +185,7 @@ static PyObject* AES_CBC_decrypt_into(AES_CBCObject *self, PyObject *args) {
         PyErr_SetString(PyExc_ValueError, "Data length must be a multiple of 16 bytes");
         return NULL;
     }
-    AES_CBC_Decrypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len);
+    AES_CBC_Decrypt(&self->ctx, (uint32_t*)buf.buf, (uint32_t)buf.len);
     PyBuffer_Release(&buf);
     Py_RETURN_NONE;
 }
@@ -271,14 +271,14 @@ static PyObject* AES_CTR_crypt(AES_CTRObject *self, PyObject *args) {
     if (!PyArg_ParseTuple(args, "y#", &data, &data_len)) return NULL;
     PyObject *out = PyBytes_FromStringAndSize(data, data_len);
     if (!out) return NULL;
-    AES_CTR_Crypt(&self->ctx, (uint8_t*)PyBytes_AS_STRING(out), (uint32_t)data_len);
+    AES_CTR_Crypt(&self->ctx, (uint32_t*)PyBytes_AS_STRING(out), (uint32_t)data_len);
     return out;
 }
 
 static PyObject* AES_CTR_crypt_into(AES_CTRObject *self, PyObject *args) {
     Py_buffer buf;
     if (!PyArg_ParseTuple(args, "w*", &buf)) return NULL;
-    AES_CTR_Crypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len);
+    AES_CTR_Crypt(&self->ctx, (uint32_t*)buf.buf, (uint32_t)buf.len);
     PyBuffer_Release(&buf);
     Py_RETURN_NONE;
 }
@@ -347,7 +347,7 @@ static PyObject* AES_GCM_encrypt(AES_GCMObject *self, PyObject *args, PyObject *
     PyObject *tag = PyBytes_FromStringAndSize(NULL, tag_len);
     if (!out || !tag) { Py_XDECREF(out); Py_XDECREF(tag); return NULL; }
     
-    AES_GCM_Encrypt(&self->ctx, (uint8_t*)PyBytes_AS_STRING(out), (uint32_t)data_len, 
+    AES_GCM_Encrypt(&self->ctx, (uint32_t*)PyBytes_AS_STRING(out), (uint32_t)data_len, 
                           (const uint8_t*)aad, (uint32_t)aad_len, 
                           (uint8_t*)PyBytes_AS_STRING(tag), (uint8_t)tag_len);
                           
@@ -365,7 +365,7 @@ static PyObject* AES_GCM_decrypt(AES_GCMObject *self, PyObject *args, PyObject *
     PyObject *out = PyBytes_FromStringAndSize(data, data_len);
     if (!out) return NULL;
     
-    bool ok = AES_GCM_Decrypt(&self->ctx, (uint8_t*)PyBytes_AS_STRING(out), (uint32_t)data_len, 
+    bool ok = AES_GCM_Decrypt(&self->ctx, (uint32_t*)PyBytes_AS_STRING(out), (uint32_t)data_len, 
                                     (const uint8_t*)aad, (uint32_t)aad_len, 
                                     (const uint8_t*)tag, (uint8_t)tag_len);
     if (!ok) {
@@ -387,7 +387,7 @@ static PyObject* AES_GCM_encrypt_into(AES_GCMObject *self, PyObject *args, PyObj
     PyObject *tag = PyBytes_FromStringAndSize(NULL, tag_len);
     if (!tag) { PyBuffer_Release(&buf); return NULL; }
 
-    AES_GCM_Encrypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len,
+    AES_GCM_Encrypt(&self->ctx, (uint32_t*)buf.buf, (uint32_t)buf.len,
                           (const uint8_t*)aad, (uint32_t)aad_len,
                           (uint8_t*)PyBytes_AS_STRING(tag), (uint8_t)tag_len);
     PyBuffer_Release(&buf);
@@ -401,7 +401,7 @@ static PyObject* AES_GCM_decrypt_into(AES_GCMObject *self, PyObject *args, PyObj
     static char *kwlist[] = {"data", "tag", "aad", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "w*y#|y#", kwlist, &buf, &tag, &tag_len, &aad, &aad_len)) return NULL;
 
-    bool ok = AES_GCM_Decrypt(&self->ctx, (uint8_t*)buf.buf, (uint32_t)buf.len,
+    bool ok = AES_GCM_Decrypt(&self->ctx, (uint32_t*)buf.buf, (uint32_t)buf.len,
                                     (const uint8_t*)aad, (uint32_t)aad_len,
                                     (const uint8_t*)tag, (uint8_t)tag_len);
     PyBuffer_Release(&buf);
@@ -462,7 +462,7 @@ static PyObject* AES_CMAC_cmac(AES_CMACObject *self, PyObject *args, PyObject *k
     PyObject *out = PyBytes_FromStringAndSize(NULL, mac_len);
     if (!out) return NULL;
     
-    AES_CMAC(&self->ctx, (const uint8_t*)data, (uint32_t)data_len, (uint8_t*)PyBytes_AS_STRING(out), (uint_fast8_t)mac_len);
+    AES_CMAC(&self->ctx, (const uint32_t*)data, (uint32_t)data_len, (uint8_t*)PyBytes_AS_STRING(out), (uint_fast8_t)mac_len);
     return out;
 }
 

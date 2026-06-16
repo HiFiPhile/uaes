@@ -173,82 +173,82 @@ void AES_CTR_Ctx_Set_Iv(AES_Ctx_t *Ctx, const uint8_t *Iv, uint32_t Ctr);
 void AES_CMAC_Init(AES_CMAC_Ctx_t *Ctx, const uint8_t *Key, AES_Mode_t Mode);
 
 /**
- * @fn	void AES_ECB_Encrypt(AES_Ctx_t* Ctx, uint8_t* Buf, uint32_t Length)
+ * @fn	void AES_ECB_Encrypt(AES_Ctx_t* Ctx, uint32_t* Buf, uint32_t Length)
  *
  * @brief	AES ECB Encrypt.
  *
  * @param [in,out]	Ctx   	AES context.
- * @param [in,out]	Buf   	Data buffer.
- * @param 		  	Length	Data length.
+ * @param [in,out]	Buf   	The buffer (must be at least 4-byte aligned).
+ * @param 		  	Length	The length.
  */
-void AES_ECB_Encrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length);
+void AES_ECB_Encrypt(AES_Ctx_t *Ctx, uint32_t *Buf, uint32_t Length);
 
 /**
- * @fn	void AES_ECB_Decrypt(AES_Ctx_t* Ctx, uint8_t* Buf, uint32_t Length)
+ * @fn	void AES_ECB_Decrypt(AES_Ctx_t* Ctx, uint32_t* Buf, uint32_t Length)
  *
  * @brief	AES ECB Decrypt.
  *
  * @param [in,out]	Ctx   	AES context.
- * @param [in,out]	Buf   	Data buffer.
- * @param 		  	Length	Data length.
+ * @param [in,out]	Buf   	The buffer (must be at least 4-byte aligned).
+ * @param 		  	Length	The length.
  */
-void AES_ECB_Decrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length);
+void AES_ECB_Decrypt(AES_Ctx_t *Ctx, uint32_t *Buf, uint32_t Length);
 
 /**
- * @fn	void AES_CBC_Encrypt(AES_Ctx_t* Ctx, uint8_t* Buf, uint32_t Length)
+ * @fn	void AES_CBC_Encrypt(AES_Ctx_t* Ctx, uint32_t* Buf, uint32_t Length)
  *
  * @brief	AES CBC Encrypt.
  *
  * @param [in,out]	Ctx   	AES context.
- * @param [in,out]	Buf   	Data buffer.
- * @param 		  	Length	Data length.
+ * @param [in,out]	Buf   	The buffer (must be at least 4-byte aligned).
+ * @param 		  	Length	The length.
  */
-void AES_CBC_Encrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length);
+void AES_CBC_Encrypt(AES_Ctx_t *Ctx, uint32_t *Buf, uint32_t Length);
 
 /**
- * @fn	void AES_CBC_Decrypt(AES_Ctx_t* Ctx, uint8_t* Buf, uint32_t Length)
+ * @fn	void AES_CBC_Decrypt(AES_Ctx_t* Ctx, uint32_t* Buf, uint32_t Length)
  *
  * @brief	AES CBC Decrypt.
  *
  * @param [in,out]	Ctx   	AES context.
- * @param [in,out]	Buf   	Data buffer.
- * @param 		  	Length	Data length.
+ * @param [in,out]	Buf   	The buffer (must be at least 4-byte aligned).
+ * @param 		  	Length	The length.
  */
-void AES_CBC_Decrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length);
+void AES_CBC_Decrypt(AES_Ctx_t *Ctx, uint32_t *Buf, uint32_t Length);
 
 /**
- * @fn	void AES_CTR_Crypt(AES_Ctx_t* Ctx, uint8_t* Buf, uint32_t Length)
+ * @fn	void AES_CTR_Crypt(AES_Ctx_t* Ctx, uint32_t* Buf, uint32_t Length)
  *
  * @brief	AES CTR Encrypt / Decrypt.
  *
  * @param [in,out]	Ctx   	AES context.
- * @param [in,out]	Buf   	Data buffer.
+ * @param [in,out]	Buf   	Data buffer (must be at least 4-byte aligned).
  * @param 		  	Length	Data length.
  */
-void AES_CTR_Crypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length);
+void AES_CTR_Crypt(AES_Ctx_t *Ctx, uint32_t *Buf, uint32_t Length);
 
 /**
- * @fn	void AES_CBC_Encrypt(AES_GCM_Ctx_t* Ctx, uint8_t* Data, uint32_t DataLen, const uint8_t* AAD, uint32_t AADLen, uint8_t* Tag, uint8_t TagLen)
+ * @fn	void AES_GCM_Encrypt(AES_GCM_Ctx_t* Ctx, uint32_t* Data, uint32_t DataLen, const uint8_t* AAD, uint32_t AADLen, uint8_t* Tag, uint8_t TagLen)
  *
  * @brief	AES-GCM Encrypt.
  *
  * @param [in,out]	Ctx   	AES context.
- * @param [in,out]	Data   	Data to be encrypted.
+ * @param [in,out]	Data   	Data to be encrypted (must be at least 4-byte aligned).
  * @param 		  	DataLen	Data length.
  * @param [in]	    AAD   	Additional authenticated data.
  * @param 		  	AADLen	AAD length.
  * @param [out]	    Tag   	Authentication tag.
  * @param 		  	TagLen	Tag length.
  */
-void AES_GCM_Encrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const uint8_t *AAD, uint32_t AADLen, uint8_t *Tag, uint8_t TagLen);
+void AES_GCM_Encrypt(AES_GCM_Ctx_t *Ctx, uint32_t *Data, uint32_t DataLen, const uint8_t *AAD, uint32_t AADLen, uint8_t *Tag, uint8_t TagLen);
 
 /**
- * @fn	bool AES_GCM_Decrypt(AES_GCM_Ctx_t* Ctx, uint8_t* Data, uint32_t DataLen, const uint8_t* AAD, uint32_t AADLen, const uint8_t* Tag, uint8_t TagLen)
+ * @fn	bool AES_GCM_Decrypt(AES_GCM_Ctx_t* Ctx, uint32_t* Data, uint32_t DataLen, const uint8_t* AAD, uint32_t AADLen, const uint8_t* Tag, uint8_t TagLen)
  *
  * @brief	AES-GCM Encrypt.
  *
  * @param [in,out]	Ctx   	AES context.
- * @param [in,out]	Data   	Data to be decrypted.
+ * @param [in,out]	Data   	Data to be decrypted (must be at least 4-byte aligned).
  * @param 		  	DataLen	Data length.
  * @param [in]	    AAD   	Additional authenticated data.
  * @param 		  	AADLen	AAD length.
@@ -257,7 +257,7 @@ void AES_GCM_Encrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
  *
  * @retval  True if tag verified, otherwise false.
  */
-bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const uint8_t *AAD, uint32_t AADLen, const uint8_t *Tag, uint8_t TagLen);
+bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint32_t *Data, uint32_t DataLen, const uint8_t *AAD, uint32_t AADLen, const uint8_t *Tag, uint8_t TagLen);
 
 /**
  * @fn	void AES_CMAC(AES_CMAC_Ctx_t* Ctx, const uint8_t* Data, uint32_t DataLen, uint8_t* Mac, uint_fast8_t MacLen)
@@ -270,7 +270,7 @@ bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
  * @param       	Mac   	Mac buffer.
  * @param 		  	MacLen	Mac length.
  */
-void AES_CMAC(AES_CMAC_Ctx_t *Ctx, const uint8_t *Data, uint32_t DataLen, uint8_t *Mac, uint_fast8_t MacLen);
+void AES_CMAC(AES_CMAC_Ctx_t *Ctx, const uint32_t *Data, uint32_t DataLen, uint8_t *Mac, uint_fast8_t MacLen);
 
 #ifdef __cplusplus
 }

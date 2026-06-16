@@ -260,13 +260,11 @@ void AES_CMAC_Init(AES_CMAC_Ctx_t *Ctx, const uint8_t *Key, AES_Mode_t Mode) {
  * @param [in,out]	Buf   	The buffer.
  * @param 		  	Length	The length.
  */
-void AES_ECB_Encrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
-    AES_Block_t work_block;
+void AES_ECB_Encrypt(AES_Ctx_t *Ctx, uint32_t *Buf, uint32_t Length) {
+    AES_Block_t *block = (AES_Block_t *)Buf;
     for (uint32_t i = 0; i < Length; i += AES_BLOCKLEN) {
-        memcpy(&work_block, Buf, AES_BLOCKLEN);
-        AES_Cipher(&work_block, Ctx->RoundKey, Ctx->Mode);
-        memcpy(Buf, &work_block, AES_BLOCKLEN);
-        Buf += AES_BLOCKLEN;
+        AES_Cipher(block, Ctx->RoundKey, Ctx->Mode);
+        block++;
     }
 }
 
@@ -279,13 +277,11 @@ void AES_ECB_Encrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
  * @param [in,out]	Buf   	The buffer.
  * @param 		  	Length	The length.
  */
-void AES_ECB_Decrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
-    AES_Block_t work_block;
+void AES_ECB_Decrypt(AES_Ctx_t *Ctx, uint32_t *Buf, uint32_t Length) {
+    AES_Block_t *block = (AES_Block_t *)Buf;
     for (uint32_t i = 0; i < Length; i += AES_BLOCKLEN) {
-        memcpy(&work_block, Buf, AES_BLOCKLEN);
-        AES_InvCipher(&work_block, Ctx->RoundKey, Ctx->Mode);
-        memcpy(Buf, &work_block, AES_BLOCKLEN);
-        Buf += AES_BLOCKLEN;
+        AES_InvCipher(block, Ctx->RoundKey, Ctx->Mode);
+        block++;
     }
 }
 
@@ -298,15 +294,13 @@ void AES_ECB_Decrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
  * @param [in,out]	Buf   	The buffer.
  * @param 		  	Length	The length.
  */
-void AES_CBC_Encrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
-    AES_Block_t work_block;
+void AES_CBC_Encrypt(AES_Ctx_t *Ctx, uint32_t *Buf, uint32_t Length) {
+    AES_Block_t *block = (AES_Block_t *)Buf;
     for (uint32_t i = 0; i < Length; i += AES_BLOCKLEN) {
-        memcpy(&work_block, Buf, AES_BLOCKLEN);
-        AES_BlockXor(&work_block, &Ctx->Iv, &work_block);
-        AES_Cipher(&work_block, Ctx->RoundKey, Ctx->Mode);
-        memcpy(Buf, &work_block, AES_BLOCKLEN);
-        AES_BlockCopy(&Ctx->Iv, &work_block);
-        Buf += AES_BLOCKLEN;
+        AES_BlockXor(block, &Ctx->Iv, block);
+        AES_Cipher(block, Ctx->RoundKey, Ctx->Mode);
+        AES_BlockCopy(&Ctx->Iv, block);
+        block++;
     }
 }
 
@@ -319,17 +313,15 @@ void AES_CBC_Encrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
  * @param [in,out]	Buf   	The buffer.
  * @param 		  	Length	The length.
  */
-void AES_CBC_Decrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
+void AES_CBC_Decrypt(AES_Ctx_t *Ctx, uint32_t *Buf, uint32_t Length) {
     AES_Block_t storeNextIv;
-    AES_Block_t work_block;
+    AES_Block_t *block = (AES_Block_t *)Buf;
     for (uint32_t i = 0; i < Length; i += AES_BLOCKLEN) {
-        memcpy(&storeNextIv, Buf, AES_BLOCKLEN);
-        memcpy(&work_block, Buf, AES_BLOCKLEN);
-        AES_InvCipher(&work_block, Ctx->RoundKey, Ctx->Mode);
-        AES_BlockXor(&work_block, &Ctx->Iv, &work_block);
-        memcpy(Buf, &work_block, AES_BLOCKLEN);
+        AES_BlockCopy(&storeNextIv, block);
+        AES_InvCipher(block, Ctx->RoundKey, Ctx->Mode);
+        AES_BlockXor(block, &Ctx->Iv, block);
         AES_BlockCopy(&Ctx->Iv, &storeNextIv);
-        Buf += AES_BLOCKLEN;
+        block++;
     }
 }
 
@@ -342,9 +334,9 @@ void AES_CBC_Decrypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
  * @param [in,out]	Buf   	Data buffer.
  * @param 		  	Length	Data length.
  */
-void AES_CTR_Crypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
+void AES_CTR_Crypt(AES_Ctx_t *Ctx, uint32_t *Buf, uint32_t Length) {
     AES_Block_t buffer;
-    AES_Block_t work_block;
+    AES_Block_t *block = (AES_Block_t *)Buf;
     /* Reconstruct big-endian 32-bit counter from IV bytes 12..15 */
     uint32_t ctr = ((uint32_t) Ctx->Iv.bytes[12] << 24) | ((uint32_t) Ctx->Iv.bytes[13] << 16) |
                    ((uint32_t) Ctx->Iv.bytes[14] << 8) | (uint32_t) Ctx->Iv.bytes[15];
@@ -353,21 +345,20 @@ void AES_CTR_Crypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
     while (Length >= AES_BLOCKLEN) {
         AES_BlockCopy(&buffer, &Ctx->Iv);
         AES_Cipher(&buffer, Ctx->RoundKey, Ctx->Mode);
-        memcpy(&work_block, Buf, AES_BLOCKLEN);
-        AES_BlockXor(&work_block, &buffer, &work_block);
-        memcpy(Buf, &work_block, AES_BLOCKLEN);
+        AES_BlockXor(block, &buffer, block);
         ctr++;
         Set_Uint32_BE(&Ctx->Iv.bytes[12], ctr);
-        Buf += AES_BLOCKLEN;
+        block++;
         Length -= AES_BLOCKLEN;
     }
 
     /* Handle remaining partial block */
     if (Length > 0) {
+        uint8_t *p_buf = (uint8_t *)block;
         AES_BlockCopy(&buffer, &Ctx->Iv);
         AES_Cipher(&buffer, Ctx->RoundKey, Ctx->Mode);
         for (uint32_t i = 0; i < Length; i++) {
-            Buf[i] ^= buffer.bytes[i];
+            p_buf[i] ^= buffer.bytes[i];
         }
         ctr++;
         Set_Uint32_BE(&Ctx->Iv.bytes[12], ctr);
@@ -386,10 +377,10 @@ void AES_CTR_Crypt(AES_Ctx_t *Ctx, uint8_t *Buf, uint32_t Length) {
  * @param       	Mac   	Mac buffer.
  * @param 		  	MacLen	Mac length.
  */
-void AES_CMAC(AES_CMAC_Ctx_t *Ctx, const uint8_t *Data, uint32_t DataLen, uint8_t *Mac, uint_fast8_t MacLen) {
+void AES_CMAC(AES_CMAC_Ctx_t *Ctx, const uint32_t *Data, uint32_t DataLen, uint8_t *Mac, uint_fast8_t MacLen) {
     AES_Block_t X = {0};
     AES_Block_t M_last;
-    AES_Block_t block;
+    const AES_Block_t *block = (const AES_Block_t *)Data;
     uint32_t n, i;
     bool flag;
     n = (DataLen + AES_BLOCKLEN - 1) / AES_BLOCKLEN; /* n is number of rounds */
@@ -406,12 +397,13 @@ void AES_CMAC(AES_CMAC_Ctx_t *Ctx, const uint8_t *Data, uint32_t DataLen, uint8_
     }
 
     if (flag) { /* last block is complete block */
-        memcpy(&M_last, &Data[AES_BLOCKLEN * (n - 1)], AES_BLOCKLEN);
+        AES_BlockCopy(&M_last, &block[n - 1]);
         AES_BlockXor(&M_last, &Ctx->K1, &M_last);
     } else {
         uint32_t last = DataLen % AES_BLOCKLEN;
+        const uint8_t *p_data = (const uint8_t *)Data;
         for (i = 0; i < last; i++) {
-            M_last.bytes[i] = Data[AES_BLOCKLEN * (n - 1) + i];
+            M_last.bytes[i] = p_data[AES_BLOCKLEN * (n - 1) + i];
         }
         M_last.bytes[last] = 0x80;
         for (i = last + 1; i < AES_BLOCKLEN; i++) {
@@ -421,8 +413,7 @@ void AES_CMAC(AES_CMAC_Ctx_t *Ctx, const uint8_t *Data, uint32_t DataLen, uint8_
     }
 
     for (i = 0; i < n - 1; i++) {
-        memcpy(&block, &Data[AES_BLOCKLEN * i], AES_BLOCKLEN);
-        AES_BlockXor(&X, &block, &X); /* Y := Mi (+) X */
+        AES_BlockXor(&X, &block[i], &X); /* Y := Mi (+) X */
         AES_Cipher(&X, Ctx->RoundKey, Ctx->Mode);
     }
 
@@ -534,13 +525,10 @@ static void AES_KeyExpansion(uint8_t *RoundKey, const uint8_t *Key, AES_Mode_t M
  * @param [in,out]	RoundKey	If non-null, the round key.
  */
 static void AES_AddRoundKey(uint8_t round, AES_Block_t *state, const AES_Block_t *RoundKey) {
-    const AES_Block_t *round_block = &RoundKey[round];
-
-    for (uint_fast8_t col = 0; col < 4; ++col) {
-        for (uint_fast8_t row = 0; row < 4; ++row) {
-            state->matrix[col][row] ^= round_block->matrix[col][row];
-        }
-    }
+    state->words[0] ^= RoundKey[round].words[0];
+    state->words[1] ^= RoundKey[round].words[1];
+    state->words[2] ^= RoundKey[round].words[2];
+    state->words[3] ^= RoundKey[round].words[3];
 }
 
 static uint8_t AES_xtime(uint8_t x) {
@@ -859,7 +847,7 @@ void AES_GCM_Init_Ctx_Iv(AES_GCM_Ctx_t *Ctx, const uint8_t *Key, const uint8_t *
  * @param [out]	    Tag   	Authentication tag.
  * @param 		  	TagLen	Tag length.
  */
-void AES_GCM_Encrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const uint8_t *AAD, uint32_t AADLen, uint8_t *Tag, uint8_t TagLen) {
+void AES_GCM_Encrypt(AES_GCM_Ctx_t *Ctx, uint32_t *Data, uint32_t DataLen, const uint8_t *AAD, uint32_t AADLen, uint8_t *Tag, uint8_t TagLen) {
     AES_Block_t iv_block;
     AES_Block_t ghash_lengths = {0};
     uint8_t *p_data;
@@ -896,7 +884,8 @@ void AES_GCM_Encrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
     /* Compute GHASH & Encrypt for any plaintext. */
     if (Data) {
         uint32_t ctr = 1;
-        p_data = Data;
+        AES_Block_t *block = (AES_Block_t *)Data;
+        p_data = (uint8_t *)Data;
         data_len = DataLen;
         while (data_len) {
             uint32_t block_len = MIN(data_len, AES_BLOCKLEN);
@@ -906,20 +895,20 @@ void AES_GCM_Encrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
             AES_Cipher(&aes_work, Ctx->RoundKey, Ctx->Mode);
 
             if (block_len == AES_BLOCKLEN) {
-                memcpy(&data_block, p_data, AES_BLOCKLEN);
-                AES_BlockXor(&data_block, &aes_work, &data_block);
-                memcpy(p_data, &data_block, AES_BLOCKLEN);
+                AES_BlockXor(block, &aes_work, block);
+                AES_BlockXor(&ghash_work, block, &ghash_work);
+                block++;
+                p_data += AES_BLOCKLEN;
             } else {
                 memcpy(&data_block, p_data, block_len);
                 AES_BlockXor(&data_block, &aes_work, &data_block);
                 memset(data_block.bytes + block_len, 0, AES_BLOCKLEN - block_len);
                 memcpy(p_data, &data_block, block_len);
+                AES_BlockXor(&ghash_work, &data_block, &ghash_work);
+                p_data += block_len;
             }
 
-            AES_BlockXor(&ghash_work, &data_block, &ghash_work);
             AES_GCM_Mul(&ghash_work, Ctx);
-
-            p_data += block_len;
             data_len -= block_len;
         }
     }
@@ -948,11 +937,9 @@ void AES_GCM_Encrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
  * @param [in]	    AAD   	Additional authenticated data.
  * @param 		  	AADLen	AAD length.
  * @param [out]	    Tag   	Authentication tag.
- * @param 		  	TagLen	Tag length.
- *
- * @retval  True if tag verified, otherwise false.
+ * @param 		  	TagLen	Tag len * @retval  True if tag verified, otherwise false.
  */
-bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const uint8_t *AAD, uint32_t AADLen, const uint8_t *Tag, uint8_t TagLen) {
+bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint32_t *Data, uint32_t DataLen, const uint8_t *AAD, uint32_t AADLen, const uint8_t *Tag, uint8_t TagLen) {
     AES_Block_t iv_block;
     AES_Block_t ghash_lengths = {0};
     uint8_t *p_data;
@@ -992,20 +979,22 @@ bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
 
     /* Compute GHASH for any ciphertext. */
     if (Data) {
-        p_data = Data;
+        AES_Block_t *block = (AES_Block_t *)Data;
+        p_data = (uint8_t *)Data;
         data_len = DataLen;
         while (data_len) {
             uint32_t block_len = MIN(data_len, AES_BLOCKLEN);
             if (block_len == AES_BLOCKLEN) {
-                memcpy(&data_block, p_data, AES_BLOCKLEN);
+                AES_BlockXor(&ghash_work, block, &ghash_work);
+                block++;
+                p_data += AES_BLOCKLEN;
             } else {
                 memcpy(&data_block, p_data, block_len);
                 memset(data_block.bytes + block_len, 0, AES_BLOCKLEN - block_len);
+                AES_BlockXor(&ghash_work, &data_block, &ghash_work);
+                p_data += block_len;
             }
-
-            AES_BlockXor(&ghash_work, &data_block, &ghash_work);
             AES_GCM_Mul(&ghash_work, Ctx);
-            p_data += block_len;
             data_len -= block_len;
         }
     }
@@ -1027,7 +1016,8 @@ bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
     /* Decrypt any ciphertext. */
     if (Data) {
         uint32_t ctr = 1;
-        p_data = Data;
+        AES_Block_t *block = (AES_Block_t *)Data;
+        p_data = (uint8_t *)Data;
         data_len = DataLen;
         while (data_len) {
             uint32_t block_len = MIN(data_len, AES_BLOCKLEN);
@@ -1036,17 +1026,20 @@ bool AES_GCM_Decrypt(AES_GCM_Ctx_t *Ctx, uint8_t *Data, uint32_t DataLen, const 
             AES_BlockCopy(&aes_work, &iv_block);
             AES_Cipher(&aes_work, Ctx->RoundKey, Ctx->Mode);
 
-            memcpy(&data_block, p_data, block_len);
-            if (block_len < AES_BLOCKLEN)
+            if (block_len == AES_BLOCKLEN) {
+                AES_BlockXor(block, &aes_work, block);
+                block++;
+                p_data += AES_BLOCKLEN;
+            } else {
+                memcpy(&data_block, p_data, block_len);
                 memset(data_block.bytes + block_len, 0, AES_BLOCKLEN - block_len);
-            AES_BlockXor(&data_block, &aes_work, &data_block);
-            memcpy(p_data, &data_block, block_len);
-
-            p_data += block_len;
+                AES_BlockXor(&data_block, &aes_work, &data_block);
+                memcpy(p_data, &data_block, block_len);
+                p_data += block_len;
+            }
             data_len -= block_len;
         }
     }
-
     return true;
 }
 
