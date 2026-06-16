@@ -83,6 +83,86 @@ NIST_VECTORS = [
         "ct": b"",
         "aad": b"",
         "tag": bytes.fromhex("070a16b46b4d4144f79bdd9dd04a287c")
+    },
+    {
+        "name": "NIST_CBC_192",
+        "mode": "CBC",
+        "key": bytes.fromhex("8e73b0f7da0e6452c810f32b809079e562f8ead2522c6b7b"),
+        "iv": bytes.fromhex("000102030405060708090a0b0c0d0e0f"),
+        "pt": bytes.fromhex("6bc1bee22e409f96e93d7e117393172a"),
+        "ct": bytes.fromhex("4f021db243bc633d7178183a9fa071e8"),
+        "aad": b"",
+        "tag": b""
+    },
+    {
+        "name": "NIST_CTR_192",
+        "mode": "CTR",
+        "key": bytes.fromhex("8e73b0f7da0e6452c810f32b809079e562f8ead2522c6b7b"),
+        "iv": bytes.fromhex("f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"),
+        "pt": bytes.fromhex("6bc1bee22e409f96e93d7e117393172a"),
+        "ct": bytes.fromhex("1abc932417521ca24f2b0459fe7e6e0b"),
+        "aad": b"",
+        "tag": b""
+    },
+    {
+        "name": "NIST_CMAC_192",
+        "mode": "CMAC",
+        "key": bytes.fromhex("8e73b0f7da0e6452c810f32b809079e562f8ead2522c6b7b"),
+        "iv": None,
+        "pt": bytes.fromhex("6bc1bee22e409f96e93d7e117393172a"),
+        "ct": b"",
+        "aad": b"",
+        "tag": bytes.fromhex("9e99a7bf31e710900662f65e617c5184")
+    },
+    {
+        "name": "NIST_CBC_256",
+        "mode": "CBC",
+        "key": bytes.fromhex("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4"),
+        "iv": bytes.fromhex("000102030405060708090a0b0c0d0e0f"),
+        "pt": bytes.fromhex("6bc1bee22e409f96e93d7e117393172a"),
+        "ct": bytes.fromhex("f58c4c04d6e5f1ba779eabfb5f7bfbd6"),
+        "aad": b"",
+        "tag": b""
+    },
+    {
+        "name": "NIST_CTR_256",
+        "mode": "CTR",
+        "key": bytes.fromhex("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4"),
+        "iv": bytes.fromhex("f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"),
+        "pt": bytes.fromhex("6bc1bee22e409f96e93d7e117393172a"),
+        "ct": bytes.fromhex("601ec313775789a5b7a7f504bbf3d228"),
+        "aad": b"",
+        "tag": b""
+    },
+    {
+        "name": "NIST_CMAC_256",
+        "mode": "CMAC",
+        "key": bytes.fromhex("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4"),
+        "iv": None,
+        "pt": bytes.fromhex("6bc1bee22e409f96e93d7e117393172a"),
+        "ct": b"",
+        "aad": b"",
+        "tag": bytes.fromhex("28a7023f452e8f82bd4bf28d8c37c35c")
+    },
+    {
+        "name": "NIST_GCM_192",
+        "mode": "GCM",
+        "key": bytes.fromhex("feffe9928665731c6d6a8f9467308308feffe9928665731c"),
+        "iv": bytes.fromhex("cafebabefacedbaddecaf888"),
+        "pt": bytes.fromhex("d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b391aafd255"),
+        "ct": bytes.fromhex("3980ca0b3c00e841eb06fac4872a2757859e1ceaa6efd984628593b40ca1e19c7d773d00c144c525ac619d18c84a3f4718e2448b2fe324d9ccda2710acade256"),
+        "aad": bytes.fromhex("feedfacedeadbeeffeedfacedeadbeefabaddad2"),
+        "tag": bytes.fromhex("12c9ff85fbe15c9c5757bee6fac3c674")
+    },
+    {
+        "name": "NIST_GCM_256",
+        "mode": "GCM",
+        "key": bytes.fromhex("feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308"),
+        "iv": bytes.fromhex("cafebabefacedbaddecaf888"),
+        "pt": bytes.fromhex("d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b391aafd255"),
+        "ct": bytes.fromhex("522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f662898015ad"),
+        "aad": bytes.fromhex("feedfacedeadbeeffeedfacedeadbeefabaddad2"),
+        "tag": bytes.fromhex("2df7cd675b4f09163b41ebf980a7f638")
     }
 ]
 
@@ -165,28 +245,44 @@ def run_tests():
             if v['mode'] == 'ECB':
                 ctx = uaes.AES_ECB(key=v['key'])
                 # AES_ECB processes in blocks
+                # Test multi-block at once
+                ct_full = ctx.encrypt(v['pt'])
+                assert ct_full == v['ct'], f"CT full mismatch. Expected {v['ct'].hex()}, got {ct_full.hex()}"
+                pt_full = ctx.decrypt(v['ct'])
+                assert pt_full == v['pt'], "PT full mismatch"
+
+                # Test chunked processing
                 ct = b''
                 for i in range(0, len(v['pt']), 16):
                     ct += ctx.encrypt(v['pt'][i:i+16])
-                assert ct == v['ct'], f"CT mismatch. Expected {v['ct'].hex()}, got {ct.hex()}"
+                assert ct == v['ct'], f"CT chunked mismatch. Expected {v['ct'].hex()}, got {ct.hex()}"
 
                 pt = b''
                 for i in range(0, len(v['ct']), 16):
                     pt += ctx.decrypt(v['ct'][i:i+16])
-                assert pt == v['pt'], "PT mismatch"
+                assert pt == v['pt'], "PT chunked mismatch"
 
             elif v['mode'] == 'CBC':
                 ctx = uaes.AES_CBC(key=v['key'], iv=v['iv'])
+                # Test multi-block at once
+                ct_full = ctx.encrypt(v['pt'])
+                assert ct_full == v['ct'], f"CT full mismatch. Expected {v['ct'].hex()}, got {ct_full.hex()}"
+                ctx = uaes.AES_CBC(key=v['key'], iv=v['iv'])
+                pt_full = ctx.decrypt(v['ct'])
+                assert pt_full == v['pt'], "PT full mismatch"
+
+                # Test chunked processing
+                ctx = uaes.AES_CBC(key=v['key'], iv=v['iv'])
                 ct = b''
                 for i in range(0, len(v['pt']), 16):
                     ct += ctx.encrypt(v['pt'][i:i+16])
-                assert ct == v['ct'], f"CT mismatch. Expected {v['ct'].hex()}, got {ct.hex()}"
+                assert ct == v['ct'], f"CT chunked mismatch. Expected {v['ct'].hex()}, got {ct.hex()}"
 
                 ctx = uaes.AES_CBC(key=v['key'], iv=v['iv'])
                 pt = b''
                 for i in range(0, len(v['ct']), 16):
                     pt += ctx.decrypt(v['ct'][i:i+16])
-                assert pt == v['pt'], "PT mismatch"
+                assert pt == v['pt'], "PT chunked mismatch"
 
                 # Test set_iv
                 ctx_set_iv = uaes.AES_CBC(key=v['key'])
